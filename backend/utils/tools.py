@@ -623,10 +623,64 @@ async def validate_extension() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tool 10: load_extension
+# ---------------------------------------------------------------------------
+
+
+@tool
+async def load_extension() -> str:
+    """Prompt the user to install the Chrome extension from the current project workspace.
+
+    Sends the extension's file path to the user's sidepanel, where they see
+    an install card with buttons to copy the path and open chrome://extensions.
+
+    Call this **after** validate_extension passes so the user can load the
+    extension into their browser.
+
+    Returns:
+        A confirmation that the user has been prompted, or an error message.
+    """
+    try:
+        project_dir = current_project_dir.get()
+    except LookupError:
+        return "Error: No project workspace is set."
+
+    # Verify manifest.json exists before prompting
+    manifest = project_dir / "manifest.json"
+    if not manifest.exists():
+        return (
+            "Error: No manifest.json found in the project workspace. "
+            "Make sure the extension files are in the project root directory."
+        )
+
+    extension_path = str(project_dir.resolve())
+
+    try:
+        outbound = current_outbound_queue.get()
+    except LookupError:
+        return (
+            f"Extension is ready at: {extension_path}\n"
+            "Ask the user to load it manually via chrome://extensions > Load unpacked."
+        )
+
+    await outbound.put({
+        "type": "extension_ready",
+        "path": extension_path,
+    })
+
+    return (
+        "The user has been prompted to install the extension in their browser. "
+        "They can click the 'Load Extension' button to auto-load it into Chrome, "
+        "or use the manual copy-path fallback if automation is unavailable. "
+        f"The extension files are at: {extension_path}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # All tools for the agent
 # ---------------------------------------------------------------------------
 
-BASE_TOOLS = [list_dir, read_file, grep_search, create_file, edit_file, run_terminal_command, get_tab_content, validate_extension]
+BASE_TOOLS = [list_dir, read_file, grep_search, create_file, edit_file, run_terminal_command, get_tab_content, validate_extension, load_extension]
 ALL_TOOLS = BASE_TOOLS + [codebase_search]
 
 

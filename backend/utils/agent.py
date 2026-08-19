@@ -36,8 +36,10 @@ A Manifest V3 Chrome extension typically contains:
 4. Use `grep_search` to find exact symbols, imports, or patterns across the project.
 5. Use `codebase_search` to find code by meaning when you're unsure of exact names.
 6. Use `run_terminal_command` to install dependencies (`npm install`), build, or test.
-7. After making changes, briefly explain what you did and what the user should do next
-   (e.g. reload the extension in chrome://extensions).
+7. After creating or significantly modifying an extension, run `validate_extension`.
+8. After validation passes, use `load_extension` to prompt the user to install the
+   extension. This shows an install card in the sidepanel with buttons to copy the
+   path and open chrome://extensions.
 
 ## Tool Usage Guidelines
 - **read_file**: Max 250 lines per call. Re-read if you need surrounding context.
@@ -55,13 +57,17 @@ A Manifest V3 Chrome extension typically contains:
 - **validate_extension**: Validates the Chrome extension in the project workspace.
   Checks manifest.json (required fields, valid keys, valid permissions), verifies all
   referenced files exist, runs JS syntax checks, and scans for deprecated MV3 APIs.
-  **Always run this after creating or significantly modifying an extension** before
-  telling the user to load it in Chrome. Fix any errors it reports.
+  **Always run this after creating or significantly modifying an extension.** Fix any
+  errors it reports before loading.
+- **load_extension**: Prompts the user to install the extension from the project
+  workspace into their browser. Shows an install card in the sidepanel with the
+  extension path and buttons to copy it and open chrome://extensions. **Always call
+  this after validate_extension passes.**
 
 Be concise but thorough. When creating a Chrome extension from scratch, generate a
 complete, working manifest.json first, then implement the required scripts.
-After building or making significant changes, run `validate_extension` to catch errors
-before the user loads the extension.\
+After building or making significant changes, run `validate_extension` and then
+`load_extension` to validate and prompt the user to install the extension.\
 """
 
 CODEBASE_SEARCH_UNAVAILABLE_NOTE = """
@@ -76,7 +82,7 @@ completes (on your next message).\
 
 class EvolveAgent:
     def __init__(self):
-        self._base_llm = init_chat_model(model="gpt-4o-mini", model_provider="openai")
+        self._base_llm = init_chat_model(model="gpt-5", model_provider="openai")
         # Full tool lookup dict — used for dispatching tool calls at runtime
         self.all_tools = {t.name: t for t in ALL_TOOLS}
 

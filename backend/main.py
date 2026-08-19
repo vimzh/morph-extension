@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from utils.agent import EvolveAgent
+from utils.companion import load_extension_via_os
 from utils.db import (
     create_conversation,
     create_project,
@@ -130,6 +131,26 @@ async def delete_project_route(project_id: str):
     if workspace.exists():
         shutil.rmtree(workspace)
     return {"ok": True}
+
+
+# --- Extension Loading ---
+
+
+@app.post("/api/load-extension/{project_id}")
+async def api_load_extension(project_id: str):
+    """Trigger OS automation to load the extension into Chrome."""
+    project_dir = DEMO_CODE_BASE / project_id
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found")
+    manifest = project_dir / "manifest.json"
+    if not manifest.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="No manifest.json found in the project workspace.",
+        )
+    extension_path = str(project_dir.resolve())
+    result = await load_extension_via_os(extension_path)
+    return result
 
 
 # --- Chat Routes ---
