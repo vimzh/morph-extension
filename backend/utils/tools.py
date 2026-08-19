@@ -591,6 +591,10 @@ async def get_console_logs(
 ) -> str:
     """Fetch recent console logs from a browser tab.
 
+    Use this when the user reports something doesn't work, a regression after a
+    change, or any runtime issue that might surface in console output. Load logs
+    early in debugging to capture errors/warnings tied to the current page.
+
     Args:
         tab_id: The numeric Chrome tab id to read logs from.
         since: Optional unix epoch ms to filter logs (inclusive).

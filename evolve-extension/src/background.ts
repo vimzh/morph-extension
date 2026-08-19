@@ -431,7 +431,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (type === MESSAGE_TYPES.getSidepanelState) {
-    sendResponse({ isOpen: Boolean(isSidepanelOpen) })
+    if (tabId) {
+      const known = sidepanelStateByTab.has(tabId)
+      const isOpen = known ? Boolean(sidepanelStateByTab.get(tabId)) : false
+      sendResponse({ isOpen, known })
+      return true
+    }
+    sendResponse({ isOpen: Boolean(isSidepanelOpen), known: false })
     return true
   }
 

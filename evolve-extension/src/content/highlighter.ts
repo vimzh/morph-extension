@@ -296,8 +296,12 @@ async function syncSidepanelState() {
     const response = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.getSidepanelState,
     })
-    setSidepanelState(Boolean(response?.isOpen))
-    sidepanelStateKnown = true
+    if (response?.known === true) {
+      setSidepanelState(Boolean(response?.isOpen))
+      sidepanelStateKnown = true
+      return
+    }
+    sidepanelStateKnown = false
   } catch {
     // Ignore errors to keep highlighter functional
   }
