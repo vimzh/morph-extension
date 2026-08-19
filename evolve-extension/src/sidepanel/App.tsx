@@ -10,6 +10,8 @@ const API_URL = 'http://localhost:8000'
 const WS_URL = API_URL.replace(/^http/, 'ws')
 const CHIP_HTML_START = '<!--EVOLVE_CHIP_START:'
 const CHIP_HTML_END = '<!--EVOLVE_CHIP_END-->'
+const MAX_CONTEXT_HTML_CHARS = 5000
+const SUMMARIZE_TRIGGER_CHARS = 5000
 
 interface Project {
   id: string
@@ -233,6 +235,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [thinking, setThinking] = useState(false)
+  const [htmlSummaryCount, setHtmlSummaryCount] = useState(0)
   const [error, setError] = useState('')
   const [openChipKey, setOpenChipKey] = useState<string | null>(null)
   const [inputChipPreview, setInputChipPreview] = useState<{
@@ -258,6 +261,7 @@ export default function App() {
   const mentionRangeRef = useRef<{ start: number; end: number } | null>(null)
   const tabsCacheRef = useRef<TabMatch[]>([])
   const mentionTooltipRef = useRef<HTMLDivElement>(null)
+  const chipHtmlCacheRef = useRef<Map<string, string>>(new Map())
 
   // WebSocket
   const wsRef = useRef<WebSocket | null>(null)
@@ -387,6 +391,9 @@ export default function App() {
   const buildChipId = (item: ClickedElementStored) => `${item.tabId}:${item.url}:${item.selector}`
   const CHIP_IDS_SEPARATOR = '||'
 
+  const getItemsKey = (items: ClickedElementStored[]) =>
+    items.map(buildChipId).sort().join(CHIP_IDS_SEPARATOR)
+
   // Parse the serialized chip-ids payload from the DOM.
   const parseChipIds = (value?: string | null) =>
     value ? value.split(CHIP_IDS_SEPARATOR).filter(Boolean) : []
@@ -427,6 +434,25 @@ export default function App() {
     chip.dataset.chipItems = JSON.stringify(items)
     const ids = items.map(buildChipId)
     chip.dataset.chipIds = ids.join(CHIP_IDS_SEPARATOR)
+  }
+
+  const cacheChipHtml = (items: ClickedElementStored[], html: string, chip?: HTMLElement | null) => {
+    const key = getItemsKey(items)
+    chipHtmlCacheRef.current.set(key, html)
+    if (chip) {
+      chip.dataset.chipHtml = html
+    }
+  }
+
+  const deleteChipHtmlCache = (items: ClickedElementStored[]) => {
+    const key = getItemsKey(items)
+    chipHtmlCacheRef.current.delete(key)
+  }
+
+  const getCachedChipHtml = (items: ClickedElementStored[], chip?: HTMLElement | null) => {
+    const key = getItemsKey(items)
+    if (chip?.dataset?.chipHtml) return chip.dataset.chipHtml
+    return chipHtmlCacheRef.current.get(key) || null
   }
 
   const formatChipLabelFromItems = (items: ClickedElementStored[]) => {
@@ -550,6 +576,18 @@ export default function App() {
 
     if (item.tag === 'tab') {
       try {
+        const response = await chrome.tabs.sendMessage(item.tabId, {
+          type: MESSAGE_TYPES.getPageContent,
+          includeHtml: true,
+        })
+        if (typeof response?.content === 'string' && response.content.length > 0) {
+          return response.content
+        }
+      } catch {
+        // fall through
+      }
+
+      try {
         const results = await chrome.scripting.executeScript({
           target: { tabId: item.tabId },
           func: () => {
@@ -613,15 +651,22 @@ export default function App() {
               })
             }
 
-            const body = document.body?.cloneNode(true) as Element | null
-            if (!body) return ''
-            sanitizeElementTree(body)
-            const html = body.outerHTML
-            return html.length > 1000 ? html.slice(0, 1000) : html
+            const root = (document.body ?? document.documentElement)?.cloneNode(true) as Element | null
+            if (!root) return ''
+            sanitizeElementTree(root)
+            const html = root.outerHTML
+            return html
           },
         })
         const html = results?.[0]?.result
-        return typeof html === 'string' ? html : ''
+        if (typeof html === 'string' && html.length > 0) return html
+
+        const rawResults = await chrome.scripting.executeScript({
+          target: { tabId: item.tabId },
+          func: () => (document.documentElement?.outerHTML ?? ''),
+        })
+        const rawHtml = rawResults?.[0]?.result
+        return typeof rawHtml === 'string' ? rawHtml : ''
       } catch {
         return ''
       }
@@ -681,7 +726,49 @@ export default function App() {
     }
   }
 
-  const buildRawHtmlForItems = async (items: ClickedElementStored[]) => {
+  const truncateHtml = (html: string, maxChars: number) => {
+    if (html.length <= maxChars) return html
+    return `${html.slice(0, maxChars)}\n<!-- Truncated: original length ${html.length} characters -->`
+  }
+
+  const summarizeHtmlIfNeeded = async (html: string) => {
+    const rawLength = html.length
+    let workingHtml = html
+    if (workingHtml.length > 20000) {
+      workingHtml = `${workingHtml.slice(0, 20000)}\n<!-- Truncated to 20000 characters before summarization -->`
+    }
+
+    if (workingHtml.length <= SUMMARIZE_TRIGGER_CHARS) return workingHtml
+
+    setHtmlSummaryCount((count) => count + 1)
+    try {
+      const res = await fetch(`${API_URL}/api/summarize-html`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: workingHtml,
+          max_chars: MAX_CONTEXT_HTML_CHARS,
+          raw_length: rawLength,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (typeof data?.summary === 'string' && data.summary.length > 0) {
+          return data.summary
+        }
+      }
+    } catch {
+      // fall through to truncation
+    } finally {
+      setHtmlSummaryCount((count) => Math.max(0, count - 1))
+    }
+
+    return truncateHtml(workingHtml, MAX_CONTEXT_HTML_CHARS)
+  }
+
+  const buildRawHtmlForItems = async (items: ClickedElementStored[], chip?: HTMLElement | null) => {
+    const cached = getCachedChipHtml(items, chip)
+    if (cached) return cached
     const htmlParts: string[] = []
     for (const item of items) {
       const html = await fetchHtmlForItem(item)
@@ -695,7 +782,16 @@ export default function App() {
       }
       htmlParts.push(html)
     }
-    return htmlParts.join('\n')
+    const payload = htmlParts.join('\n')
+    const summarized = await summarizeHtmlIfNeeded(payload)
+    cacheChipHtml(items, summarized, chip)
+    return summarized
+  }
+
+  const prefetchChipHtml = async (items: ClickedElementStored[], chip?: HTMLElement | null) => {
+    const cached = getCachedChipHtml(items, chip)
+    if (cached) return
+    await buildRawHtmlForItems(items, chip)
   }
 
   const serializeEditorWithHtml = async () => {
@@ -712,24 +808,11 @@ export default function App() {
         const chipIds = parseChipIds(node.dataset.chipIds)
         if (chipIds.length > 0) {
           const items = readChipItems(node)
-          const htmlParts: string[] = []
           const label = formatChipLabelFromItems(items)
           const safeLabel = label.replace(/--/g, '-')
           const host = getChipHostFromItems(items)
           const safeHost = host.replace(/--/g, '-')
-          for (const item of items) {
-            const html = await fetchHtmlForItem(item)
-            if (!html) continue
-            if (item.tag !== 'tab') {
-              const css = await fetchCssForItem(item)
-              if (css) {
-                htmlParts.push(`<style>${css}</style>\n${html}`)
-                continue
-              }
-            }
-            htmlParts.push(html)
-          }
-          const payload = htmlParts.join('\n')
+          const payload = await buildRawHtmlForItems(items, node)
           parts.push(`${CHIP_HTML_START}${safeLabel}|${safeHost}-->${payload}${CHIP_HTML_END}`)
           continue
         }
@@ -946,7 +1029,7 @@ export default function App() {
     const chipRect = chip.getBoundingClientRect()
     if (!fieldRect) return
 
-    const rawHtml = await buildRawHtmlForItems(items)
+    const rawHtml = await buildRawHtmlForItems(items, chip)
     setInputChipPreview({
       html: rawHtml || 'No HTML captured.',
       top: chipRect.top - fieldRect.top - 6,
@@ -995,6 +1078,7 @@ export default function App() {
       ensureTrailingSpace(target)
       setQuery(root.textContent ?? '')
       root.focus()
+      void prefetchChipHtml(nextItems, target)
     }
 
     const selection = window.getSelection()
@@ -1098,6 +1182,7 @@ export default function App() {
       setInputChipPreview(null)
       setOpenChipKey(null)
       const itemsToRemove = readChipItems(chip)
+      deleteChipHtmlCache(itemsToRemove)
       void removeClickedElementsBulk(itemsToRemove)
       removeTrailingSpace(chip)
       chip.remove()
@@ -1112,6 +1197,7 @@ export default function App() {
       root.appendChild(space)
       root.focus()
       setQuery(root.textContent ?? '')
+      void prefetchChipHtml([item], chip)
       return
     }
 
@@ -1128,6 +1214,7 @@ export default function App() {
 
     setQuery(root.textContent ?? '')
     root.focus()
+    void prefetchChipHtml([item], chip)
   }
 
   // Remove a chip from the editor when background removes a selection.
@@ -1142,12 +1229,14 @@ export default function App() {
       const nextItems = items.filter((item) => buildChipId(item) !== chipId)
       const nextIds = nextItems.map(buildChipId)
       if (nextItems.length === 0) {
+        deleteChipHtmlCache(items)
         const next = chip.nextSibling
         if (next && next.nodeType === Node.TEXT_NODE && (next.textContent || '').trim() === '') {
           next.remove()
         }
         chip.remove()
       } else {
+        deleteChipHtmlCache(items)
         writeChipItems(chip, nextItems)
         const labelEl = chip.querySelector<HTMLElement>('.context-chip-label')
         const iconEl = chip.querySelector<HTMLImageElement>('.context-chip-icon')
@@ -1159,6 +1248,7 @@ export default function App() {
           iconEl.src = getFaviconUrl(host)
           iconEl.alt = host
         }
+        void prefetchChipHtml(nextItems, chip)
       }
     })
     setQuery(root.textContent ?? '')
@@ -2250,6 +2340,9 @@ export default function App() {
 
         {/* Error */}
         {error && <div className="error">{error}</div>}
+        {htmlSummaryCount > 0 && (
+          <div className="html-summarizing">Summarizing context…</div>
+        )}
 
         {/* Input */}
         <form onSubmit={handleSubmit} className="chat-input">
@@ -2317,7 +2410,7 @@ export default function App() {
           <button
             type="submit"
             className="send-btn"
-            disabled={loading || !query.trim() || !activeProject}
+            disabled={loading || !query.trim() || !activeProject || htmlSummaryCount > 0}
             title="Send message"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

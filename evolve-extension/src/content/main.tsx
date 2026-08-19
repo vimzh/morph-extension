@@ -80,6 +80,8 @@ hookConsole()
 
 startHoverHighlighter()
 
+const MAX_CONTEXT_HTML_CHARS = 1000
+
 const sanitizeElementTree = (root: Element) => {
   const selectors = [
     'script',
@@ -105,6 +107,57 @@ const sanitizeElementTree = (root: Element) => {
     if (style.includes('display:none') || style.includes('visibility:hidden')) {
       el.remove()
     }
+  })
+}
+
+const pruneLargeHtml = (root: Element) => {
+  const selectors = [
+    'script',
+    'style',
+    'noscript',
+    'svg',
+    'header',
+    'nav',
+    'footer',
+    'iframe',
+    'canvas',
+    'template',
+    'meta',
+    'link',
+    'form',
+    'input',
+    'textarea',
+    'select',
+    'button',
+    'video',
+    'audio',
+    'picture',
+    'source',
+    'object',
+    'embed',
+  ]
+
+  selectors.forEach((selector) => {
+    root.querySelectorAll(selector).forEach((el) => el.remove())
+  })
+
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    Array.from(el.attributes).forEach((attr) => {
+      const name = attr.name.toLowerCase()
+      if (
+        name.startsWith('on') ||
+        name === 'style' ||
+        name === 'srcset' ||
+        name === 'src' ||
+        name === 'href' ||
+        name === 'integrity' ||
+        name === 'nonce' ||
+        name === 'crossorigin' ||
+        name === 'referrerpolicy'
+      ) {
+        el.removeAttribute(attr.name)
+      }
+    })
   })
 }
 
@@ -162,17 +215,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const clone = el.cloneNode(true) as Element
       stripHighlighting(clone)
       sanitizeElementTree(clone)
-      sendResponse({ html: clone.outerHTML })
+      let html = clone.outerHTML
+      if (html.length > MAX_CONTEXT_HTML_CHARS) {
+        pruneLargeHtml(clone)
+        html = clone.outerHTML
+        if (html.length > MAX_CONTEXT_HTML_CHARS) {
+          html = html.slice(0, MAX_CONTEXT_HTML_CHARS)
+        }
+      }
+      sendResponse({ html })
       return true
     }
-    const body = document.body?.cloneNode(true) as Element | null
-    if (!body) {
+    const root = (document.body ?? document.documentElement)?.cloneNode(true) as Element | null
+    if (!root) {
       sendResponse({ html: '' })
       return true
     }
-    stripHighlighting(body)
-    sanitizeElementTree(body)
-    sendResponse({ html: body.outerHTML })
+    stripHighlighting(root)
+    sanitizeElementTree(root)
+    sendResponse({ html: root.outerHTML })
     return true
   }
 })
