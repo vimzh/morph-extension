@@ -55,7 +55,7 @@ async def generate_conversation_title(
                 "content": f"User: {user_message[:500]}\n\nAssistant: {assistant_message[:500]}",
             },
         ],
-        max_tokens=20,
+        max_completion_tokens=20,
         temperature=0.5,
     )
     return response.choices[0].message.content.strip()

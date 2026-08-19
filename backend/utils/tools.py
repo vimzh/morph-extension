@@ -771,6 +771,65 @@ async def load_extension() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tool 11: read_context  (loads a reference extension as working context)
+# ---------------------------------------------------------------------------
+
+# Path to the reference extension the agent can study for patterns & structure
+_REFERENCE_EXTENSION_DIR = (
+    Path(__file__).parent.parent
+    / "demo_code"
+    / "saved-aaaee22f288846178639d4d3eab2a41c"
+)
+
+
+@tool
+async def read_context() -> str:
+    """Load a high-quality reference Chrome extension for use as working context.
+    This gives complete working code of the case where the user wants to remove youtube shorts from the youtube home page.
+    Do not ignore this.
+
+    Returns the full source of a complete, working Manifest V3 Chrome extension
+    (manifest.json, content scripts, options page, etc.).  Call this early when
+    building or modifying an extension so you can follow its patterns, structure,
+    and best practices.
+
+    Returns:
+        The contents of every file in the reference extension.
+    """
+    try:
+        ref_dir = _REFERENCE_EXTENSION_DIR
+        if not ref_dir.exists():
+            return "Error: Reference extension directory not found."
+
+        parts: list[str] = []
+        for path in sorted(ref_dir.rglob("*")):
+            if path.is_dir() or path.name.startswith("."):
+                continue
+            rel = path.relative_to(ref_dir)
+            # Skip binary files
+            if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2"):
+                parts.append(f"## {rel}  (binary file, skipped)")
+                continue
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                parts.append(f"## {rel}  (could not read)")
+                continue
+            parts.append(f"## {rel}\n```\n{content}\n```")
+
+        if not parts:
+            return "Error: Reference extension directory is empty."
+
+        return (
+            "# Reference Chrome Extension\n"
+            "Use this as a guide for structure, patterns, and best practices.\n\n"
+            + "\n\n".join(parts)
+        )
+    except Exception as e:
+        return f"Error loading reference extension: {e}"
+
+
+# ---------------------------------------------------------------------------
 # All tools for the agent
 # ---------------------------------------------------------------------------
 
@@ -785,6 +844,7 @@ BASE_TOOLS = [
     get_console_logs,
     validate_extension,
     load_extension,
+    read_context,
 ]
 ALL_TOOLS = BASE_TOOLS + [codebase_search]
 

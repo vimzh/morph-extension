@@ -79,7 +79,7 @@ async def extract_rules(
                     "content": conversation_text,
                 },
             ],
-            max_tokens=512,
+            max_completion_tokens=512,
             temperature=0.3,
         )
         raw = response.choices[0].message.content.strip()
