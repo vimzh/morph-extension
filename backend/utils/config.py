@@ -18,7 +18,7 @@ current_provider: contextvars.ContextVar[str] = contextvars.ContextVar(
 PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {
         "primary_model": "gpt-5",
-        "secondary_model": "gpt-4o-mini",
+        "secondary_model": "gpt-5-nano-2025-08-07",
         "embedding_model": "text-embedding-3-small",
         "model_provider": "openai",  # for LangChain init_chat_model
     },
