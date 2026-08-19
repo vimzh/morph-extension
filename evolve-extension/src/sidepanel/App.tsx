@@ -226,6 +226,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [thinking, setThinking] = useState(false)
   const [error, setError] = useState('')
   const [openChipKey, setOpenChipKey] = useState<string | null>(null)
   const [inputChipPreview, setInputChipPreview] = useState<{
@@ -1318,6 +1319,7 @@ export default function App() {
       if (messageHandlerRef.current) {
         setError('Connection lost')
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
       }
       wsRef.current = null
@@ -1490,6 +1492,7 @@ export default function App() {
     }
     setInputChipPreview(null)
     setLoading(true)
+    setThinking(false)
     setError('')
 
     // Optimistically add user message
@@ -1577,8 +1580,15 @@ export default function App() {
         return
       }
 
+      // Agent is thinking (between tool calls and next LLM response)
+      if (data.type === 'thinking') {
+        setThinking(true)
+        return
+      }
+
       // Tool started
       if (data.type === 'tool_start') {
+        setThinking(false)
         const { label, favIconUrl } = getToolLabel(data.name, data.args || {}, tabsMapRef.current)
         parts.push({ type: 'tool', name: data.name, label, status: 'running', favIconUrl })
         ensureAssistantMessage()
@@ -1609,6 +1619,7 @@ export default function App() {
 
       // Streaming content chunk
       if (data.type === 'content') {
+        setThinking(false)
         accumulated += data.content
         const last = parts[parts.length - 1]
         if (last && last.type === 'text') {
@@ -1625,6 +1636,7 @@ export default function App() {
       if (data.type === 'error') {
         setError(data.message || 'Something went wrong')
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
         if (!assistantAdded) {
           setMessages((prev) => {
@@ -1663,6 +1675,7 @@ export default function App() {
           fetchConversations(activeProject.id)
         }
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
       }
     }
@@ -2034,6 +2047,13 @@ export default function App() {
                 <span className="dot" />
                 <span className="dot" />
               </div>
+            </div>
+          )}
+          {thinking && !loading && (
+            <div className="thinking-indicator">
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
             </div>
           )}
           <div ref={messagesEndRef} />

@@ -241,3 +241,6 @@ class EvolveAgent:
                 messages.append(
                     ToolMessage(content=str(result), tool_call_id=tool_call["id"])
                 )
+
+            # All tool calls done; LLM will process results next iteration
+            yield {"type": "thinking"}
