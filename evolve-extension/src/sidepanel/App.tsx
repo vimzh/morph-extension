@@ -277,6 +277,37 @@ export default function App() {
     fetchProjects()
   }, [])
 
+  // Close chip tooltips when clicking outside.
+  useEffect(() => {
+    const handleGlobalClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+
+      if (target.closest('.context-chip-remove')) {
+        if (openChipKey) setOpenChipKey(null)
+        if (inputChipPreview) setInputChipPreview(null)
+        return
+      }
+
+      if (
+        target.closest('.chip-tooltip-wrapper') ||
+        target.closest('.chip-tooltip') ||
+        target.closest('.chip-tooltip-trigger') ||
+        target.closest('.input-chip-tooltip')
+      ) {
+        return
+      }
+
+      if (openChipKey) setOpenChipKey(null)
+      if (inputChipPreview) setInputChipPreview(null)
+    }
+
+    document.addEventListener('click', handleGlobalClick, true)
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true)
+    }
+  }, [openChipKey, inputChipPreview])
+
   const formatElementShortLabel = (item: ClickedElementStored) => {
     if (item.tag === 'tab') {
       return item.tabTitle || getHost(item)
@@ -1058,7 +1089,11 @@ export default function App() {
     remove.textContent = '×'
     remove.title = 'Remove element'
     remove.setAttribute('aria-label', 'Remove element')
-    remove.addEventListener('click', () => {
+    remove.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      setInputChipPreview(null)
+      setOpenChipKey(null)
       const itemsToRemove = readChipItems(chip)
       void removeClickedElementsBulk(itemsToRemove)
       removeTrailingSpace(chip)
@@ -1217,6 +1252,7 @@ export default function App() {
 
   useEffect(() => {
     let activeTabId: number | null = null
+    let heartbeat: number | undefined
 
     const notifyOpen = async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -1225,11 +1261,20 @@ export default function App() {
         type: MESSAGE_TYPES.sidepanelOpen,
         tabId: activeTabId,
       })
+      if (activeTabId) {
+        heartbeat = window.setInterval(() => {
+          chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.sidepanelOpen,
+            tabId: activeTabId,
+          })
+        }, 2000)
+      }
     }
 
     void notifyOpen()
 
     return () => {
+      if (heartbeat) window.clearInterval(heartbeat)
       if (!activeTabId) return
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.sidepanelClose,
