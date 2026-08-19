@@ -512,6 +512,54 @@
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.25) inset;
 }
 
+.chip-tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chip-tooltip-trigger {
+  cursor: pointer;
+}
+
+.chip-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  max-width: 360px;
+  min-width: 200px;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  padding: 0.5rem 0.6rem;
+  color: #e5e7eb;
+}
+
+.chip-tooltip-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  margin-bottom: 0.35rem;
+}
+
+.chip-tooltip-content {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.input-chip-tooltip {
+  max-width: 420px;
+  transform: translateY(-100%);
+}
+
 .message .context-chip-remove {
   display: none;
 }
