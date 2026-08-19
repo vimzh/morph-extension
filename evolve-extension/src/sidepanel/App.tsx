@@ -23,6 +23,12 @@ interface Conversation {
   created_at: string
 }
 
+interface Rule {
+  id: string
+  content: string
+  created_at: string
+}
+
 type TabMatch = {
   id: number
   title: string
@@ -233,6 +239,10 @@ export default function App() {
     top: number
     left: number
   } | null>(null)
+
+  // Rules state
+  const [rules, setRules] = useState<Rule[]>([])
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -1303,6 +1313,15 @@ export default function App() {
           return
         }
 
+        // Backend extracted new rules from the conversation
+        if (data.type === 'rules_updated') {
+          const newRules = data.rules as Rule[]
+          if (Array.isArray(newRules) && newRules.length > 0) {
+            setRules((prev) => [...prev, ...newRules])
+          }
+          return
+        }
+
         messageHandlerRef.current?.(data)
       } catch {
         // ignore malformed messages
@@ -1399,8 +1418,10 @@ export default function App() {
     setActiveConversationId(null)
     setMessages([])
     setError('')
+    setRulesOpen(false)
     setSidebarView('conversations')
     fetchConversations(project.id)
+    fetchRules(project.id)
   }
 
   // --- Conversation operations ---
@@ -1411,6 +1432,29 @@ export default function App() {
       if (res.ok) {
         const data: Conversation[] = await res.json()
         setConversations(data)
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  const fetchRules = async (projectId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/projects/${projectId}/rules`)
+      if (res.ok) {
+        const data: Rule[] = await res.json()
+        setRules(data)
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  const handleDeleteRule = async (ruleId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/rules/${ruleId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setRules((prev) => prev.filter((r) => r.id !== ruleId))
       }
     } catch {
       // Silently fail
@@ -1890,14 +1934,60 @@ export default function App() {
           </button>
           <h1>{activeProject ? activeProject.name : 'AI Chat'}</h1>
           {activeProject && (
-            <button className="new-chat-header-btn" onClick={startNewConversation} title="New chat">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-              </svg>
-            </button>
+            <>
+              <button
+                className={`new-chat-header-btn ${rulesOpen ? 'active' : ''}`}
+                onClick={() => setRulesOpen(!rulesOpen)}
+                title="Agent memory"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
+                  <line x1="10" y1="22" x2="14" y2="22" />
+                </svg>
+                {rules.length > 0 && <span className="rules-badge">{rules.length}</span>}
+              </button>
+              <button className="new-chat-header-btn" onClick={startNewConversation} title="New chat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </button>
+            </>
           )}
         </div>
+
+        {/* Rules panel */}
+        {rulesOpen && (
+          <div className="rules-panel">
+            <div className="rules-panel-header">
+              <span className="rules-panel-title">Agent Memory</span>
+              <span className="rules-panel-count">{rules.length} rule{rules.length !== 1 ? 's' : ''}</span>
+            </div>
+            {rules.length === 0 ? (
+              <div className="rules-empty">
+                No rules yet. The agent will learn your preferences as you chat.
+              </div>
+            ) : (
+              <div className="rules-list">
+                {rules.map((rule) => (
+                  <div key={rule.id} className="rules-item">
+                    <span className="rules-item-content">{rule.content}</span>
+                    <button
+                      className="rules-item-delete"
+                      onClick={() => handleDeleteRule(rule.id)}
+                      title="Delete rule"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Messages */}
         <div className="messages-container">

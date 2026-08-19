@@ -43,6 +43,15 @@ async def init_db():
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rules (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
         await db.execute("PRAGMA foreign_keys = ON")
         await db.commit()
 
@@ -155,3 +164,41 @@ async def get_messages(conversation_id: str) -> list[dict]:
         )
         rows = await cursor.fetchall()
     return [{"role": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+
+
+# --- Rules ---
+
+
+async def save_rules(project_id: str, rules: list[str]) -> list[dict]:
+    """Bulk-insert new rules for a project. Returns the created rule dicts."""
+    now = datetime.now(timezone.utc).isoformat()
+    created: list[dict] = []
+    async with aiosqlite.connect(DB_PATH) as db:
+        for content in rules:
+            rule_id = uuid.uuid4().hex
+            await db.execute(
+                "INSERT INTO rules (id, project_id, content, created_at) VALUES (?, ?, ?, ?)",
+                (rule_id, project_id, content, now),
+            )
+            created.append({"id": rule_id, "content": content, "created_at": now})
+        await db.commit()
+    return created
+
+
+async def get_rules(project_id: str) -> list[dict]:
+    """Get all rules for a project, oldest first."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, content, created_at FROM rules WHERE project_id = ? ORDER BY created_at",
+            (project_id,),
+        )
+        rows = await cursor.fetchall()
+    return [{"id": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+
+
+async def delete_rule(rule_id: str) -> bool:
+    """Delete a single rule. Returns True if deleted."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM rules WHERE id = ?", (rule_id,))
+        await db.commit()
+        return cursor.rowcount > 0

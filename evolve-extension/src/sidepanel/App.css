@@ -1224,3 +1224,158 @@
 .conversation-list::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* --- Rules Panel --- */
+
+.rules-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #7c6bf0;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  border-radius: 7px;
+  text-align: center;
+  padding: 0 3px;
+  pointer-events: none;
+}
+
+.new-chat-header-btn {
+  position: relative;
+}
+
+.new-chat-header-btn.active {
+  color: #7c6bf0;
+}
+
+.rules-panel {
+  border-bottom: 1px solid #2a2a2a;
+  background: #181818;
+  max-height: 220px;
+  overflow-y: auto;
+  animation: rulesSlideDown 0.15s ease-out;
+}
+
+@keyframes rulesSlideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 220px;
+  }
+}
+
+.rules-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.rules-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+}
+
+.rules-panel-count {
+  font-size: 11px;
+  color: #666;
+}
+
+.rules-empty {
+  padding: 14px;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.rules-list {
+  padding: 4px 0;
+}
+
+.rules-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 14px;
+  transition: background 0.1s;
+}
+
+.rules-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rules-item-content {
+  flex: 1;
+  font-size: 12px;
+  color: #ccc;
+  line-height: 1.4;
+}
+
+.rules-item-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 2px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  margin-top: 1px;
+}
+
+.rules-item:hover .rules-item-delete {
+  opacity: 1;
+}
+
+.rules-item-delete:hover {
+  color: #e55;
+  background: rgba(255, 80, 80, 0.1);
+}
+
+.rules-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rules-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rules-panel::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 2px;
+}
+
+@media (prefers-color-scheme: light) {
+  .rules-panel {
+    background: #f8f8f8;
+    border-color: #e0e0e0;
+  }
+
+  .rules-panel-header {
+    border-color: #e0e0e0;
+  }
+
+  .rules-panel-title {
+    color: #666;
+  }
+
+  .rules-item-content {
+    color: #333;
+  }
+
+  .rules-item:hover {
+    background: rgba(0, 0, 0, 0.03);
+  }
+}

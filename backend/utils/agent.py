@@ -91,11 +91,21 @@ class EvolveAgent:
         history: list[dict],
         codebase_search_available: bool = True,
         active_tabs: list[dict] | None = None,
+        rules: list[str] | None = None,
     ) -> list:
         """Convert dict-based history to LangChain message objects."""
         prompt = SYSTEM_PROMPT
         if not codebase_search_available:
             prompt += CODEBASE_SEARCH_UNAVAILABLE_NOTE
+
+        if rules:
+            rule_lines = "\n".join(f"- {r}" for r in rules)
+            prompt += (
+                "\n\n## Agent Memory\n"
+                "The following rules were learned from previous interactions with this user.\n"
+                "Follow them unless the user explicitly overrides one.\n"
+                + rule_lines
+            )
 
         if active_tabs:
             tab_lines = []
@@ -148,10 +158,15 @@ class EvolveAgent:
 
         return bound_llm, cs_available
 
-    async def get_chat_response(self, history: list[dict], project_id: str) -> str:
+    async def get_chat_response(
+        self,
+        history: list[dict],
+        project_id: str,
+        rules: list[str] | None = None,
+    ) -> str:
         """Send conversation history to the LLM, execute any tool calls, and return the final reply."""
         bound_llm, cs_available = self._prepare_request(project_id)
-        messages = self._build_messages(history, codebase_search_available=cs_available)
+        messages = self._build_messages(history, codebase_search_available=cs_available, rules=rules)
 
         while True:
             response = await bound_llm.ainvoke(messages)
@@ -174,6 +189,7 @@ class EvolveAgent:
         project_id: str,
         active_tabs: list[dict] | None = None,
         pending_tab_requests: dict | None = None,
+        rules: list[str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Stream conversation history to the LLM, execute tool calls, and yield event dicts.
 
@@ -188,6 +204,7 @@ class EvolveAgent:
             history,
             codebase_search_available=cs_available,
             active_tabs=active_tabs,
+            rules=rules,
         )
 
         # Set up the outbound queue so get_tab_content can push events

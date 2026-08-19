@@ -15,14 +15,18 @@ from utils.db import (
     create_conversation,
     create_project,
     delete_project,
+    delete_rule,
     get_history,
     get_messages,
+    get_rules,
     init_db,
     list_conversations as db_list_conversations,
     list_projects as db_list_projects,
     save_message,
+    save_rules,
     update_conversation_title,
 )
+from utils.memory import extract_rules
 from utils.tools import DEMO_CODE_BASE
 
 logger = logging.getLogger(__name__)
@@ -106,6 +110,12 @@ class Message(BaseModel):
     created_at: str
 
 
+class Rule(BaseModel):
+    id: str
+    content: str
+    created_at: str
+
+
 # --- Project Routes ---
 
 
@@ -166,7 +176,9 @@ async def chat(request: ChatRequest):
     await save_message(conv_id, "user", request.query)
 
     history = await get_history(conv_id)
-    assistant_msg = await agent.get_chat_response(history, project_id=request.project_id)
+    rule_rows = await get_rules(request.project_id)
+    rules = [r["content"] for r in rule_rows]
+    assistant_msg = await agent.get_chat_response(history, project_id=request.project_id, rules=rules)
 
     await save_message(conv_id, "assistant", assistant_msg)
 
@@ -232,6 +244,10 @@ async def ws_chat(websocket: WebSocket, project_id: str):
             await save_message(conv_id, "user", query)
             history = await get_history(conv_id)
 
+            # Load project rules for agent memory
+            rule_rows = await get_rules(project_id)
+            rules = [r["content"] for r in rule_rows]
+
             # Let the client know the conversation id first
             await websocket.send_json(
                 {"type": "conversation_id", "conversation_id": conv_id}
@@ -244,6 +260,7 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                     project_id=project_id,
                     active_tabs=active_tabs,
                     pending_tab_requests=pending_tab_requests,
+                    rules=rules,
                 ):
                     if event["type"] == "content":
                         collected.append(event["content"])
@@ -281,6 +298,31 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                     asyncio.create_task(
                         _generate_and_send_title(websocket, conv_id, query, content)
                     )
+
+                # Extract rules from the conversation in the background
+                async def _extract_and_save_rules(
+                    ws: WebSocket,
+                    pid: str,
+                    conv_history: list[dict],
+                    existing_rules: list[str],
+                ):
+                    try:
+                        new_rules = await extract_rules(conv_history, existing_rules)
+                        if new_rules:
+                            created = await save_rules(pid, new_rules)
+                            await ws.send_json(
+                                {"type": "rules_updated", "rules": created}
+                            )
+                    except Exception:
+                        logger.exception("Failed to extract rules")
+
+                # Build full history including the assistant reply
+                full_history = history + [{"role": "assistant", "content": content}]
+                asyncio.create_task(
+                    _extract_and_save_rules(
+                        websocket, project_id, full_history, rules
+                    )
+                )
             except WebSocketDisconnect:
                 break
             except Exception as exc:
@@ -308,6 +350,23 @@ async def list_conversations(project_id: str):
 async def get_conversation(conversation_id: str):
     rows = await get_messages(conversation_id)
     return [Message(**r) for r in rows]
+
+
+# --- Rules Routes ---
+
+
+@app.get("/projects/{project_id}/rules", response_model=list[Rule])
+async def list_rules(project_id: str):
+    rows = await get_rules(project_id)
+    return [Rule(**r) for r in rows]
+
+
+@app.delete("/rules/{rule_id}")
+async def delete_rule_route(rule_id: str):
+    deleted = await delete_rule(rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"ok": True}
 
 
 if __name__ == "__main__":
