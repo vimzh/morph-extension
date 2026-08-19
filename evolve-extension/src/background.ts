@@ -16,6 +16,19 @@ type SidePanelState = {
   isOpen?: boolean
 }
 
+type ConsoleLogEntry = {
+  timestamp: number
+  level: 'log' | 'info' | 'warn' | 'error' | 'debug'
+  message: string
+  url?: string
+}
+
+type ConsoleLogFilters = {
+  since?: number
+  levels?: Array<ConsoleLogEntry['level']>
+  limit?: number
+}
+
 function getStoredList(stored: StorageState): ClickedElementStored[] {
   const existing = stored[CLICKED_ELEMENTS_KEY]
   return Array.isArray(existing) ? existing : []
@@ -119,6 +132,39 @@ async function broadcastClickedElementsUpdated(elements: ClickedElementStored[])
 const sidepanelStateByTab = new Map<number, boolean>()
 let isSidepanelOpen = false
 
+const consoleLogsByTab = new Map<number, ConsoleLogEntry[]>()
+const MAX_CONSOLE_LOGS_PER_TAB = 500
+
+function appendConsoleLog(tabId: number, entry: ConsoleLogEntry) {
+  const list = consoleLogsByTab.get(tabId) ?? []
+  list.push(entry)
+  if (list.length > MAX_CONSOLE_LOGS_PER_TAB) {
+    list.splice(0, list.length - MAX_CONSOLE_LOGS_PER_TAB)
+  }
+  consoleLogsByTab.set(tabId, list)
+}
+
+function filterConsoleLogs(tabId: number, filters: ConsoleLogFilters = {}) {
+  const list = consoleLogsByTab.get(tabId) ?? []
+  const since = typeof filters.since === 'number' ? filters.since : undefined
+  const levels = Array.isArray(filters.levels) && filters.levels.length > 0
+    ? new Set(filters.levels)
+    : null
+  const limit = typeof filters.limit === 'number' && filters.limit > 0 ? filters.limit : MAX_CONSOLE_LOGS_PER_TAB
+
+  const filtered = list.filter((entry) => {
+    if (since !== undefined && entry.timestamp < since) return false
+    if (levels && !levels.has(entry.level)) return false
+    return true
+  })
+
+  return filtered.slice(-limit)
+}
+
+function clearConsoleLogs(tabId: number) {
+  consoleLogsByTab.delete(tabId)
+}
+
 async function readClickedElements(): Promise<ClickedElementStored[]> {
   const stored: StorageState = await chrome.storage.local.get(CLICKED_ELEMENTS_KEY)
   return dedupeBySelector(getStoredList(stored))
@@ -210,6 +256,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ elements })
     })
     return true
+  }
+
+  if (type === MESSAGE_TYPES.storeConsoleLog) {
+    if (!tabId) {
+      respondNoTab(sendResponse)
+      return false
+    }
+
+    const payload = message?.payload as ConsoleLogEntry | undefined
+    if (!payload || typeof payload.message !== 'string' || typeof payload.timestamp !== 'number') {
+      respondOk(sendResponse)
+      return false
+    }
+
+    appendConsoleLog(tabId, {
+      level: payload.level ?? 'log',
+      timestamp: payload.timestamp,
+      message: payload.message,
+      url: payload.url,
+    })
+    respondOk(sendResponse)
+    return false
+  }
+
+  if (type === MESSAGE_TYPES.getConsoleLogs) {
+    if (!tabId) {
+      sendResponse({ logs: [] })
+      return false
+    }
+
+    const filters: ConsoleLogFilters = {
+      since: message?.since,
+      levels: message?.levels,
+      limit: message?.limit,
+    }
+
+    const logs = filterConsoleLogs(tabId, filters)
+    sendResponse({ logs })
+    return false
+  }
+
+  if (type === MESSAGE_TYPES.clearConsoleLogs) {
+    if (tabId) clearConsoleLogs(tabId)
+    respondOk(sendResponse)
+    return false
   }
 
   if (type === MESSAGE_TYPES.storeClicked) {
@@ -363,6 +454,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false
+})
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  consoleLogsByTab.delete(tabId)
+  sidepanelStateByTab.delete(tabId)
 })
 
 /**

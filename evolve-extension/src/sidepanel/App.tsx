@@ -1175,6 +1175,47 @@ export default function App() {
           return
         }
 
+        // Backend is asking us to fetch console logs for a tab
+        if (data.type === 'request_console_logs') {
+          const tabId = data.tab_id as number
+          const requestId = data.request_id as string
+          const since = typeof data.since === 'number' ? data.since : undefined
+          const levels = Array.isArray(data.levels) ? (data.levels as string[]) : undefined
+
+          const sendLogs = (content: string) => {
+            ws.send(
+              JSON.stringify({
+                type: 'console_logs_response',
+                request_id: requestId,
+                content,
+              }),
+            )
+          }
+
+          chrome.runtime
+            .sendMessage({
+              type: MESSAGE_TYPES.getConsoleLogs,
+              tabId,
+              since,
+              levels,
+            })
+            .then((response) => {
+              const logs = Array.isArray(response?.logs) ? response.logs : []
+              const formatted = logs
+                .map((entry: { timestamp: number; level: string; message: string; url?: string }) => {
+                  const time = new Date(entry.timestamp).toISOString()
+                  const url = entry.url ? ` (${entry.url})` : ''
+                  return `[${time}] ${entry.level.toUpperCase()}: ${entry.message}${url}`
+                })
+                .join('\n')
+              sendLogs(formatted || '(no console logs)')
+            })
+            .catch(() => {
+              sendLogs(`Error: could not retrieve console logs for tab ${tabId}`)
+            })
+          return
+        }
+
         // Backend generated a title for a conversation
         if (data.type === 'conversation_title') {
           setConversations((prev) =>

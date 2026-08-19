@@ -19,6 +19,9 @@ export const MESSAGE_TYPES = {
   clearHighlightsDom: 'clear-clicked-dom',
   clickedElementsUpdated: 'clicked-elements-updated',
   getPageContent: 'get-page-content',
+  storeConsoleLog: 'store-console-log',
+  getConsoleLogs: 'get-console-logs',
+  clearConsoleLogs: 'clear-console-logs',
 } as const
 
 export type MessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES]

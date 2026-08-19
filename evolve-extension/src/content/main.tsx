@@ -6,6 +6,78 @@ import App from './views/App.tsx'
 
 console.log('[Evolve] Hello world from content script!')
 
+const CONSOLE_LEVELS = ['log', 'info', 'warn', 'error', 'debug'] as const
+type ConsoleLevel = (typeof CONSOLE_LEVELS)[number]
+
+const safeStringify = (value: unknown) => {
+  const seen = new WeakSet()
+  try {
+    return JSON.stringify(value, (_key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) return '[Circular]'
+        seen.add(val)
+      }
+      if (val instanceof Error) {
+        return {
+          name: val.name,
+          message: val.message,
+          stack: val.stack,
+        }
+      }
+      return val
+    })
+  } catch {
+    return String(value)
+  }
+}
+
+const formatConsoleArgs = (args: unknown[]) =>
+  args
+    .map((arg) => {
+      if (typeof arg === 'string') return arg
+      if (arg instanceof Error) return arg.stack ?? arg.message
+      return safeStringify(arg)
+    })
+    .join(' ')
+
+const sendConsoleLog = (level: ConsoleLevel, args: unknown[]) => {
+  const message = formatConsoleArgs(args)
+  void chrome.runtime.sendMessage({
+    type: MESSAGE_TYPES.storeConsoleLog,
+    payload: {
+      level,
+      timestamp: Date.now(),
+      message,
+      url: window.location.href,
+    },
+  })
+}
+
+const hookConsole = () => {
+  const win = window as unknown as { __evolveConsoleHooked?: boolean }
+  if (win.__evolveConsoleHooked) return
+  win.__evolveConsoleHooked = true
+
+  CONSOLE_LEVELS.forEach((level) => {
+    const consoleRef = console as unknown as Record<string, (...args: unknown[]) => void>
+    const original = consoleRef[level].bind(console)
+    consoleRef[level] = (...args: unknown[]) => {
+      sendConsoleLog(level, args)
+      original(...args)
+    }
+  })
+
+  window.addEventListener('error', (event) => {
+    sendConsoleLog('error', [event.message, event.error])
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    sendConsoleLog('error', ['Unhandled promise rejection', event.reason])
+  })
+}
+
+hookConsole()
+
 startHoverHighlighter()
 
 const sanitizeElementTree = (root: Element) => {
