@@ -1,0 +1,123 @@
+.overlay-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, 90vw);
+  background: rgba(20, 20, 20, 0.92);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 2147483647;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  user-select: none;
+  overflow: hidden;
+}
+
+.overlay-panel.collapsed {
+  width: auto;
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.overlay-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.overlay-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f97316;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2);
+}
+
+.overlay-status-dot[data-open='true'] {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+}
+
+.overlay-count {
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.overlay-toggle {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.overlay-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.overlay-body {
+  padding: 0.75rem;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.overlay-empty {
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.overlay-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.overlay-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.75rem;
+}
+
+.overlay-chip-label {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-chip-remove {
+  border: none;
+  background: transparent;
+  color: #fca5a5;
+  font-size: 0.9rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.overlay-chip-remove:hover {
+  color: #fecaca;
+}
