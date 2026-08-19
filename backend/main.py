@@ -217,6 +217,12 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                     fut = pending_tab_requests.pop(rid, None)
                     if fut and not fut.done():
                         fut.set_result(content)
+                elif msg_type == "console_logs_response":
+                    rid = data.get("request_id")
+                    content = data.get("content", "")
+                    fut = pending_tab_requests.pop(rid, None)
+                    if fut and not fut.done():
+                        fut.set_result(content)
                 else:
                     await incoming.put(data)
         except WebSocketDisconnect:
