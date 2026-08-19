@@ -37,7 +37,15 @@ current_tab_content_cache: contextvars.ContextVar[
     dict[tuple[int, bool], str]
 ] = contextvars.ContextVar("current_tab_content_cache")
 
+# Per-session cache of console logs so the agent can paginate
+# without re-fetching from the browser on every call.
+# Key: (tab_id, since, levels) → full log string
+current_console_log_cache: contextvars.ContextVar[
+    dict[tuple[int, int | None, tuple[str, ...] | None], str]
+] = contextvars.ContextVar("current_console_log_cache")
+
 TAB_CONTENT_CHUNK_SIZE = 10_000
+CONSOLE_LOG_CHUNK_SIZE = 10_000
 
 DEMO_CODE_BASE = Path(__file__).parent.parent / "demo_code"
 
@@ -570,7 +578,88 @@ async def get_tab_content(
 
 
 # ---------------------------------------------------------------------------
-# Tool 9: validate_extension
+# Tool 9: get_console_logs  (fetches console logs from the user's browser)
+# ---------------------------------------------------------------------------
+
+
+@tool
+async def get_console_logs(
+    tab_id: int,
+    since: int | None = None,
+    levels: list[str] | None = None,
+    offset: int = 0,
+) -> str:
+    """Fetch recent console logs from a browser tab.
+
+    Args:
+        tab_id: The numeric Chrome tab id to read logs from.
+        since: Optional unix epoch ms to filter logs (inclusive).
+        levels: Optional list of log levels to include (log, info, warn, error, debug).
+        offset: Character offset to start reading from. Use 0 (default) to
+            fetch fresh logs from the browser. Use the offset indicated in
+            the response metadata to continue reading.
+
+    Returns:
+        A chunk of logs together with pagination metadata, or an
+        error message if the tab could not be reached.
+    """
+    try:
+        pending = current_pending_tab_requests.get()
+        outbound = current_outbound_queue.get()
+        cache = current_console_log_cache.get()
+    except LookupError:
+        return "Error: get_console_logs is not available outside of a WebSocket session."
+
+    levels_key = tuple(levels) if levels else None
+    cache_key = (tab_id, since, levels_key)
+
+    if offset > 0:
+        full_logs = cache.get(cache_key)
+        if full_logs is None:
+            return (
+                "Error: No cached logs for this tab/filter.  "
+                "Call get_console_logs with offset=0 first to fetch logs."
+            )
+    else:
+        request_id = uuid.uuid4().hex
+        future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
+        pending[request_id] = future
+
+        await outbound.put(
+            {
+                "type": "request_console_logs",
+                "tab_id": tab_id,
+                "request_id": request_id,
+                "since": since,
+                "levels": levels,
+            }
+        )
+
+        try:
+            full_logs = await asyncio.wait_for(future, timeout=15)
+        except asyncio.TimeoutError:
+            pending.pop(request_id, None)
+            return f"Error: Timed out waiting for logs from tab {tab_id}."
+
+        cache[cache_key] = full_logs
+
+    total = len(full_logs)
+    chunk = full_logs[offset : offset + CONSOLE_LOG_CHUNK_SIZE]
+    end = offset + len(chunk)
+    has_more = end < total
+
+    header = f"[Showing characters {offset}–{end} of {total} total]"
+    footer = (
+        f"\n\n[More logs available — call get_console_logs(tab_id={tab_id}, "
+        f"since={since}, levels={levels}, offset={end}) to continue]"
+        if has_more
+        else "\n\n[End of logs]"
+    )
+    return f"{header}\n\n{chunk}{footer}"
+
+
+# ---------------------------------------------------------------------------
+# Tool 10: validate_extension
 # ---------------------------------------------------------------------------
 
 
@@ -680,7 +769,18 @@ async def load_extension() -> str:
 # All tools for the agent
 # ---------------------------------------------------------------------------
 
-BASE_TOOLS = [list_dir, read_file, grep_search, create_file, edit_file, run_terminal_command, get_tab_content, validate_extension, load_extension]
+BASE_TOOLS = [
+    list_dir,
+    read_file,
+    grep_search,
+    create_file,
+    edit_file,
+    run_terminal_command,
+    get_tab_content,
+    get_console_logs,
+    validate_extension,
+    load_extension,
+]
 ALL_TOOLS = BASE_TOOLS + [codebase_search]
 
 

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from utils.tools import (
     ALL_TOOLS,
     DEMO_CODE_BASE,
+    current_console_log_cache,
     current_outbound_queue,
     current_pending_tab_requests,
     current_project_dir,
@@ -194,6 +195,7 @@ class EvolveAgent:
         outbound: asyncio.Queue[dict] = asyncio.Queue()
         current_outbound_queue.set(outbound)
         current_tab_content_cache.set({})
+        current_console_log_cache.set({})
         if pending_tab_requests is not None:
             current_pending_tab_requests.set(pending_tab_requests)
 
