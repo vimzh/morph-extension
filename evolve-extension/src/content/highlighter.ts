@@ -50,12 +50,15 @@ let clickOverlayEl: HTMLDivElement | null = null
 let clickLabelEl: HTMLDivElement | null = null
 let isMetaKeyDown = false
 let isSidepanelOpen = false
+let sidepanelStateKnown = false
 
 /**
  * Injects the overlay/label and clicked-highlight styles once per page.
  */
 function ensureStyle() {
-  if (document.getElementById(STYLE_ID)) return
+  const existing = document.getElementById(STYLE_ID)
+  if (existing && (existing as HTMLStyleElement).isConnected) return
+  existing?.remove()
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = `
@@ -115,32 +118,32 @@ function ensureStyle() {
       z-index: 2147483646 !important;
     }
   `
-  document.head.appendChild(style)
+  document.head?.appendChild(style)
 }
 
 /**
  * Ensures the overlay and label elements exist in the document.
  */
 function ensureOverlay() {
-  if (!overlayEl) {
+  if (!overlayEl || !overlayEl.isConnected) {
     overlayEl = document.createElement('div')
     overlayEl.id = OVERLAY_ID
     document.documentElement.appendChild(overlayEl)
   }
 
-  if (!labelEl) {
+  if (!labelEl || !labelEl.isConnected) {
     labelEl = document.createElement('div')
     labelEl.id = LABEL_ID
     document.documentElement.appendChild(labelEl)
   }
 
-  if (!clickOverlayEl) {
+  if (!clickOverlayEl || !clickOverlayEl.isConnected) {
     clickOverlayEl = document.createElement('div')
     clickOverlayEl.id = CLICK_OVERLAY_ID
     document.documentElement.appendChild(clickOverlayEl)
   }
 
-  if (!clickLabelEl) {
+  if (!clickLabelEl || !clickLabelEl.isConnected) {
     clickLabelEl = document.createElement('div')
     clickLabelEl.id = CLICK_LABEL_ID
     document.documentElement.appendChild(clickLabelEl)
@@ -294,6 +297,7 @@ async function syncSidepanelState() {
       type: MESSAGE_TYPES.getSidepanelState,
     })
     setSidepanelState(Boolean(response?.isOpen))
+    sidepanelStateKnown = true
   } catch {
     // Ignore errors to keep highlighter functional
   }
@@ -382,8 +386,11 @@ function applyClickedOverlay(el: Element | null) {
  */
 function handleMouseMove(event: MouseEvent) {
   if (!state.enabled) return
-  if (!isSidepanelOpen) return
-  if (!isMetaKeyDown) return
+  if (!isSidepanelOpen && sidepanelStateKnown) return
+  if (!event.metaKey && !isMetaKeyDown) return
+  if (event.metaKey && !isMetaKeyDown) {
+    isMetaKeyDown = true
+  }
   const el = document.elementFromPoint(event.clientX, event.clientY)
   if (!el || isExtensionUi(el)) return
 
@@ -401,6 +408,7 @@ function handleMouseMove(event: MouseEvent) {
 function setSidepanelState(open: boolean) {
   if (isSidepanelOpen === open) return
   isSidepanelOpen = open
+  sidepanelStateKnown = true
 
   if (isSidepanelOpen) {
     void restoreClickedHighlights()
@@ -482,9 +490,34 @@ export async function startHoverHighlighter() {
     }
   })
 
+  const refreshOnVisible = async () => {
+    if (document.visibilityState !== 'visible') return
+    ensureStyle()
+    ensureOverlay()
+    await syncSidepanelState()
+    if (isSidepanelOpen) {
+      await restoreClickedHighlights()
+    }
+    if (pinnedSelector) {
+      const el = document.querySelector(pinnedSelector)
+      if (el) applyClickedOverlay(el)
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    void refreshOnVisible()
+  })
+
+  window.addEventListener('focus', () => {
+    void refreshOnVisible()
+  })
+
   document.addEventListener('click', (event) => {
-    if (!isSidepanelOpen) return
-    if (!isMetaKeyDown) return
+    if (!isSidepanelOpen && sidepanelStateKnown) return
+    if (!event.metaKey && !isMetaKeyDown) return
+    if (event.metaKey && !isMetaKeyDown) {
+      isMetaKeyDown = true
+    }
     event.preventDefault()
     event.stopImmediatePropagation()
     const target = event.target

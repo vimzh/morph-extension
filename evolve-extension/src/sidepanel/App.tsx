@@ -8,6 +8,8 @@ import './App.css'
 
 const API_URL = 'http://localhost:8000'
 const WS_URL = API_URL.replace(/^http/, 'ws')
+const CHIP_HTML_START = '<!--EVOLVE_CHIP_START:'
+const CHIP_HTML_END = '<!--EVOLVE_CHIP_END-->'
 
 interface Project {
   id: string
@@ -33,7 +35,7 @@ type MessagePart =
 
 type DisplayPart =
   | { type: 'text'; content: string }
-  | { type: 'chip'; items: ClickedElementStored[] }
+  | { type: 'chip'; items: ClickedElementStored[]; rawHtml?: string; label?: string; host?: string }
 
 interface Message {
   role: string
@@ -107,12 +109,19 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [openChipKey, setOpenChipKey] = useState<string | null>(null)
+  const [inputChipPreview, setInputChipPreview] = useState<{
+    html: string
+    top: number
+    left: number
+  } | null>(null)
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarView, setSidebarView] = useState<SidebarView>('projects')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
+  const inputFieldRef = useRef<HTMLDivElement>(null)
   const knownChipIdsRef = useRef<Set<string>>(new Set())
   const mentionRangeRef = useRef<{ start: number; end: number } | null>(null)
   const tabsCacheRef = useRef<TabMatch[]>([])
@@ -299,6 +308,62 @@ export default function App() {
       .map((part) => (part.type === 'text' ? part.content : formatChipLabelFromItems(part.items)))
       .join('')
 
+  const looksLikeHtml = (value: string) => /<[^>]+>/.test(value)
+
+  const parseMessageWithChipMarkers = (value: string): DisplayPart[] | null => {
+    if (!value.includes(CHIP_HTML_START)) return null
+    const parts: DisplayPart[] = []
+    let cursor = 0
+    while (cursor < value.length) {
+      const start = value.indexOf(CHIP_HTML_START, cursor)
+      if (start === -1) {
+        const tail = value.slice(cursor)
+        if (tail) parts.push({ type: 'text', content: tail })
+        break
+      }
+
+      if (start > cursor) {
+        parts.push({ type: 'text', content: value.slice(cursor, start) })
+      }
+
+      const labelStart = start + CHIP_HTML_START.length
+      const labelEnd = value.indexOf('-->', labelStart)
+      if (labelEnd === -1) {
+        parts.push({ type: 'text', content: value.slice(start) })
+        break
+      }
+
+      const rawLabel = value.slice(labelStart, labelEnd).trim()
+      const [label, host] = rawLabel.split('|').map((part) => part.trim())
+      const contentStart = labelEnd + 3
+      const end = value.indexOf(CHIP_HTML_END, contentStart)
+      if (end === -1) {
+        parts.push({ type: 'text', content: value.slice(start) })
+        break
+      }
+
+      const rawHtml = value.slice(contentStart, end)
+      parts.push({ type: 'chip', items: [], rawHtml, label: label || 'Context HTML', host })
+      cursor = end + CHIP_HTML_END.length
+    }
+
+    return parts
+  }
+
+  const getChipLabelForPart = (part: DisplayPart) =>
+    part.type === 'chip'
+      ? part.items.length > 0
+        ? formatChipLabelFromItems(part.items)
+        : part.label || 'Context HTML'
+      : ''
+
+  const getChipHostForPart = (part: DisplayPart) =>
+    part.type === 'chip'
+      ? part.items.length > 0
+        ? getChipHostFromItems(part.items)
+        : part.host || 'unknown'
+      : 'unknown'
+
   const chipMap = useMemo(() => {
     const map = new Map<string, ClickedElementStored>()
     clickedElements.forEach((item) => {
@@ -430,6 +495,9 @@ export default function App() {
               if (rule.type !== CSSRule.STYLE_RULE) continue
               const styleRule = rule as CSSStyleRule
               try {
+                if (styleRule.selectorText.includes('evolve-clicked-highlight')) {
+                  continue
+                }
                 if (el.matches(styleRule.selectorText)) {
                   cssTexts.push(styleRule.cssText)
                 }
@@ -450,6 +518,23 @@ export default function App() {
     }
   }
 
+  const buildRawHtmlForItems = async (items: ClickedElementStored[]) => {
+    const htmlParts: string[] = []
+    for (const item of items) {
+      const html = await fetchHtmlForItem(item)
+      if (!html) continue
+      if (item.tag !== 'tab') {
+        const css = await fetchCssForItem(item)
+        if (css) {
+          htmlParts.push(`<style>${css}</style>\n${html}`)
+          continue
+        }
+      }
+      htmlParts.push(html)
+    }
+    return htmlParts.join('\n')
+  }
+
   const serializeEditorWithHtml = async () => {
     const root = editorRef.current
     if (!root) return ''
@@ -465,6 +550,10 @@ export default function App() {
         if (chipIds.length > 0) {
           const items = readChipItems(node)
           const htmlParts: string[] = []
+          const label = formatChipLabelFromItems(items)
+          const safeLabel = label.replace(/--/g, '-')
+          const host = getChipHostFromItems(items)
+          const safeHost = host.replace(/--/g, '-')
           for (const item of items) {
             const html = await fetchHtmlForItem(item)
             if (!html) continue
@@ -477,7 +566,8 @@ export default function App() {
             }
             htmlParts.push(html)
           }
-          parts.push(htmlParts.join('\n'))
+          const payload = htmlParts.join('\n')
+          parts.push(`${CHIP_HTML_START}${safeLabel}|${safeHost}-->${payload}${CHIP_HTML_END}`)
           continue
         }
         parts.push(node.textContent || '')
@@ -666,6 +756,39 @@ export default function App() {
     setMentionOpen(true)
     void refreshMentionMatches(queryText)
     updateMentionPosition()
+  }
+
+  const handleEditorClick = async (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null
+    if (!target) return
+    if (target.closest('.context-chip-remove')) {
+      setInputChipPreview(null)
+      return
+    }
+
+    const chip = target.closest<HTMLElement>('[data-chip-ids]')
+    if (!chip) {
+      setInputChipPreview(null)
+      return
+    }
+
+    const items = readChipItems(chip)
+    if (items.length === 0) {
+      setInputChipPreview(null)
+      return
+    }
+
+    const field = inputFieldRef.current
+    const fieldRect = field?.getBoundingClientRect()
+    const chipRect = chip.getBoundingClientRect()
+    if (!fieldRect) return
+
+    const rawHtml = await buildRawHtmlForItems(items)
+    setInputChipPreview({
+      html: rawHtml || 'No HTML captured.',
+      top: chipRect.top - fieldRect.top - 6,
+      left: Math.max(8, chipRect.left - fieldRect.left),
+    })
   }
 
   // Insert or merge a chip at cursor; merges with adjacent chip to coalesce.
@@ -1221,6 +1344,13 @@ export default function App() {
     }
 
     const finalQuery = rawMessage
+    const displayPartsWithHtml = await Promise.all(
+      displayParts.map(async (part) => {
+        if (part.type !== 'chip') return part
+        const rawHtml = await buildRawHtmlForItems(part.items)
+        return { ...part, rawHtml }
+      }),
+    )
     const chipItems = displayParts
       .filter((part): part is { type: 'chip'; items: ClickedElementStored[] } => part.type === 'chip')
       .flatMap((part) => part.items)
@@ -1240,6 +1370,7 @@ export default function App() {
     if (editorRef.current) {
       editorRef.current.textContent = ''
     }
+    setInputChipPreview(null)
     setLoading(true)
     setError('')
 
@@ -1251,7 +1382,7 @@ export default function App() {
         role: 'user',
         content: displayText || rawMessage,
         created_at: now,
-        displayParts: displayParts.length > 0 ? displayParts : undefined,
+        displayParts: displayPartsWithHtml.length > 0 ? displayPartsWithHtml : undefined,
       },
     ])
     let activeTabs: { id: number; url: string; title: string; active: boolean }[] = []
@@ -1696,22 +1827,70 @@ export default function App() {
                 <div className="message-content">
                   {msg.role === 'assistant' ? (
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  ) : msg.displayParts && msg.displayParts.length > 0 ? (
+                  ) : (msg.displayParts && msg.displayParts.length > 0) || parseMessageWithChipMarkers(msg.content) ? (
                     <span className="message-inline-parts">
-                      {msg.displayParts.map((part, j) =>
-                        part.type === 'text' ? (
-                          <span key={j}>{part.content}</span>
-                        ) : (
-                          <span key={j} className="context-chip message-chip" title={formatChipLabelFromItems(part.items)}>
-                            <img
-                              className="context-chip-icon"
-                              src={getFaviconUrl(getChipHostFromItems(part.items))}
-                              alt={formatChipLabelFromItems(part.items)}
-                            />
-                            <span className="context-chip-label">{formatChipLabelFromItems(part.items)}</span>
+                      {(msg.displayParts && msg.displayParts.length > 0
+                        ? msg.displayParts
+                        : parseMessageWithChipMarkers(msg.content) || []
+                      ).map((part, j) => {
+                        if (part.type === 'text') {
+                          return <span key={j}>{part.content}</span>
+                        }
+                        const chipKey = `${i}-${j}`
+                        const isOpen = openChipKey === chipKey
+                        const label = getChipLabelForPart(part)
+                        const host = getChipHostForPart(part)
+                        return (
+                          <span key={j} className="chip-tooltip-wrapper">
+                            <button
+                              type="button"
+                              className="context-chip message-chip chip-tooltip-trigger"
+                              title="Click to preview raw HTML"
+                              onClick={() => setOpenChipKey(isOpen ? null : chipKey)}
+                            >
+                              {(part.items.length > 0 || host) && (
+                                <img
+                                  className="context-chip-icon"
+                                  src={getFaviconUrl(host)}
+                                  alt={label}
+                                />
+                              )}
+                              <span className="context-chip-label">{label}</span>
+                            </button>
+                            {isOpen && (
+                              <div className="chip-tooltip" role="tooltip">
+                                <div className="chip-tooltip-title">Raw HTML</div>
+                                <pre className="chip-tooltip-content">{part.rawHtml || 'No HTML captured.'}</pre>
+                              </div>
+                            )}
                           </span>
                         )
-                      )}
+                      })}
+                    </span>
+                  ) : looksLikeHtml(msg.content) ? (
+                    <span className="message-inline-parts">
+                      {(() => {
+                        const chipKey = `html-${i}`
+                        const isOpen = openChipKey === chipKey
+                        return (
+                          <span className="chip-tooltip-wrapper">
+                            <button
+                              type="button"
+                              className="context-chip message-chip chip-tooltip-trigger"
+                              title="Click to preview raw HTML"
+                              onClick={() => setOpenChipKey(isOpen ? null : chipKey)}
+                            >
+                              <span className="context-chip-label">Context HTML</span>
+                            </button>
+                            {isOpen && (
+                              <div className="chip-tooltip" role="tooltip">
+                                <div className="chip-tooltip-title">Raw HTML</div>
+                                <pre className="chip-tooltip-content">{msg.content}</pre>
+                              </div>
+                            )}
+                          </span>
+                        )
+                      })()}
                     </span>
                   ) : (
                     msg.content
@@ -1738,16 +1917,27 @@ export default function App() {
         {/* Input */}
         <form onSubmit={handleSubmit} className="chat-input">
           <div className="chat-input-main">
-            <div className="chat-input-field">
+            <div className="chat-input-field" ref={inputFieldRef}>
               <div
                 ref={editorRef}
                 className="chat-input-editor"
                 contentEditable={Boolean(activeProject) && !loading}
                 data-placeholder={activeProject ? 'Type a message...' : 'Select a project first...'}
                 onInput={handleEditorInput}
+                onClick={handleEditorClick}
                 onKeyDown={handleEditorKeyDown}
                 suppressContentEditableWarning
               />
+              {inputChipPreview && (
+                <div
+                  className="chip-tooltip input-chip-tooltip"
+                  style={{ top: `${inputChipPreview.top}px`, left: `${inputChipPreview.left}px` }}
+                  role="tooltip"
+                >
+                  <div className="chip-tooltip-title">Raw HTML</div>
+                  <pre className="chip-tooltip-content">{inputChipPreview.html}</pre>
+                </div>
+              )}
               {mentionOpen && mentionPosition && (
                 <div
                   className="mention-tooltip"
