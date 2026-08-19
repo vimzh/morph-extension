@@ -25,6 +25,9 @@ Non-Mac Instructions:
  - Extensions are created inside of `./backend/demo_code`
  - Follow the `Load Unpacked` instructions from above to load in extensions.
 
+## CHROMIUM FORK
+The Chromium fork is located in the branch: `chromium`.
+
 ## Inspiration
 Web browsing is static. Browsers and websites treat all of their users almost exactly the same, but there isn't a one-size fits all for the billions who use the internet. If a user wants some feature added or changed (e.g. hiding all YouTube shorts when visiting the website to avoid distraction), they must either: (i) hope the browser/website developer can and are willing to make it for them, (ii) hope and trust someone made a Chrome extension for their exact use case (without charging an arm and a leg), or (iii) have the time and expertise to make it themself.
 
@@ -36,6 +39,10 @@ We believe we need to stop constraining users with this one-size fits all mindse
 -  Alastair's YouTube filter: When visiting YouTube.com, hide all YouTube shorts and all videos which have any League of Legends keywords in their title between 9 AM - 5 PM.
 
 ![youtube_extension_gif](./media/youtube_extension.gif)
+
+- Haley's Email Manager: Stanford students get a lot of spam (and are forced to use Outlook), Haley wanted an extension which will help her quickly delete all her spam emails.
+
+![email_manager_gif](./media/email_manager_extension.gif)
 
 - Antonio's Ad Blocker: Chrome banned uBlock Origin (Antonio's favorite ad blocker), but Antonio doesn't want to switch browsers. Antonio uses **evolve** to create a custom ad blocker for his most visited sites (and if he ever wants to extend its ad-blocking capabilities to new sites he can just tell **evolve** to update the extension).
 ![adblocker extension gif](./media/adblock_extension.gif)
