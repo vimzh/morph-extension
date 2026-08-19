@@ -57,7 +57,7 @@ function respondNoTab(sendResponse: (response: { ok: boolean } | { elements: Cli
 function sendSidepanelState(tabId: number, isOpen: boolean) {
   chrome.tabs.sendMessage(tabId, {
     type: isOpen ? MESSAGE_TYPES.sidepanelOpen : MESSAGE_TYPES.sidepanelClose,
-  })
+  }).catch(() => {})
 }
 
 async function broadcastSidepanelState(isOpen: boolean) {
@@ -77,20 +77,20 @@ function sendUnhighlightSelector(tabId: number, selector: string) {
   chrome.tabs.sendMessage(tabId, {
     type: MESSAGE_TYPES.unhighlightSelector,
     selector,
-  })
+  }).catch(() => {})
 }
 
 function sendHighlightSelector(tabId: number, selector: string) {
   chrome.tabs.sendMessage(tabId, {
     type: MESSAGE_TYPES.highlightSelector,
     selector,
-  })
+  }).catch(() => {})
 }
 
 function sendClearHighlightsDom(tabId: number) {
   chrome.tabs.sendMessage(tabId, {
     type: MESSAGE_TYPES.clearHighlightsDom,
-  })
+  }).catch(() => {})
 }
 
 async function broadcastClearHighlightsDom() {
@@ -131,6 +131,7 @@ async function broadcastClickedElementsUpdated(elements: ClickedElementStored[])
 
 const sidepanelStateByTab = new Map<number, boolean>()
 let isSidepanelOpen = false
+const INITIAL_RELOAD_KEY = 'evolveSidepanelInitialReloadDone'
 
 const consoleLogsByTab = new Map<number, ConsoleLogEntry[]>()
 const MAX_CONSOLE_LOGS_PER_TAB = 500
@@ -206,6 +207,19 @@ async function setSidepanelState(tabId: number, open: boolean) {
   sidepanelStateByTab.set(tabId, open)
   sendSidepanelState(tabId, open)
   await broadcastSidepanelState(open)
+}
+
+async function reloadAllTabsOnce() {
+  const stored = await chrome.storage.local.get(INITIAL_RELOAD_KEY)
+  if (stored?.[INITIAL_RELOAD_KEY]) return
+
+  await chrome.storage.local.set({ [INITIAL_RELOAD_KEY]: true })
+  const tabs = await chrome.tabs.query({})
+  await Promise.allSettled(
+    tabs
+      .filter((tab) => typeof tab.id === 'number')
+      .map((tab) => chrome.tabs.reload(tab.id as number)),
+  )
 }
 
 
@@ -446,7 +460,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       respondNoTab(sendResponse)
       return false
     }
-    void setSidepanelState(tabId, true).then(() => respondOk(sendResponse))
+    void setSidepanelState(tabId, true)
+      .then(() => reloadAllTabsOnce())
+      .then(() => respondOk(sendResponse))
     return true
   }
 
