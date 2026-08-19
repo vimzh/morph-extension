@@ -3,11 +3,9 @@
 import json
 import logging
 
-from openai import AsyncOpenAI
+from utils.config import get_secondary_client, get_secondary_model
 
 logger = logging.getLogger(__name__)
-
-_client = AsyncOpenAI()
 
 EXTRACTION_PROMPT = """\
 You are a meta-analysis assistant. Your job is to review a conversation between \
@@ -38,12 +36,14 @@ Respond ONLY with the JSON array. No explanation, no markdown fences.\
 async def extract_rules(
     history: list[dict],
     existing_rules: list[str],
+    provider: str = "openai",
 ) -> list[str]:
     """Analyse a conversation and return new rules to remember.
 
     Args:
         history: The conversation as [{role, content}, ...].
         existing_rules: Rules already stored for this project.
+        provider: LLM provider to use ("openai" or "nvidia").
 
     Returns:
         A (possibly empty) list of new rule strings.
@@ -65,8 +65,10 @@ async def extract_rules(
     conversation_text = "\n\n".join(convo_lines)
 
     try:
-        response = await _client.chat.completions.create(
-            model="gpt-4o-mini",
+        client = get_secondary_client(provider)
+        model = get_secondary_model(provider)
+        response = await client.chat.completions.create(
+            model=model,
             messages=[
                 {
                     "role": "system",

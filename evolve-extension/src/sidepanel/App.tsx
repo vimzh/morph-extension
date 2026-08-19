@@ -245,6 +245,9 @@ export default function App() {
   const [rules, setRules] = useState<Rule[]>([])
   const [rulesOpen, setRulesOpen] = useState(false)
 
+  // Provider state
+  const [provider, setProvider] = useState<'openai' | 'nvidia'>('openai')
+
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarView, setSidebarView] = useState<SidebarView>('projects')
@@ -1817,6 +1820,7 @@ export default function App() {
         query: finalQuery,
         conversation_id: activeConversationId,
         active_tabs: activeTabs,
+        provider,
       }),
     )
   }
@@ -2032,6 +2036,15 @@ export default function App() {
             </svg>
           </button>
           <h1>{activeProject ? activeProject.name : 'AI Chat'}</h1>
+          <select
+            className="provider-select"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as 'openai' | 'nvidia')}
+            title="LLM provider"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="nvidia">NVIDIA</option>
+          </select>
           {activeProject && (
             <>
               <button

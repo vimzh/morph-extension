@@ -249,6 +249,37 @@
   flex: 1;
 }
 
+.provider-select {
+  appearance: none;
+  background: #2a2a2a;
+  color: #ccc;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 4px 24px 4px 8px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.provider-select:hover {
+  border-color: #666;
+  color: #fff;
+}
+
+.provider-select:focus {
+  border-color: #7c3aed;
+}
+
+.provider-select option {
+  background: #1e1e1e;
+  color: #ccc;
+}
+
 .menu-btn,
 .new-chat-header-btn {
   display: flex;
@@ -1099,6 +1130,23 @@
   .chat-header {
     background: #fafafa;
     border-bottom-color: #ddd;
+  }
+
+  .provider-select {
+    background: #f0f0f0;
+    color: #333;
+    border-color: #ccc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .provider-select:hover {
+    border-color: #999;
+    color: #111;
+  }
+
+  .provider-select option {
+    background: #fff;
+    color: #333;
   }
 
   .menu-btn:hover,

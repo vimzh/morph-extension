@@ -5,6 +5,7 @@ from pathlib import Path
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from utils.config import PROVIDERS, current_provider
 from utils.prompts import CODEBASE_SEARCH_UNAVAILABLE_NOTE, SYSTEM_PROMPT
 from utils.tools import (
     ALL_TOOLS,
@@ -20,9 +21,34 @@ from utils.tools import (
 
 class EvolveAgent:
     def __init__(self):
-        self._base_llm = init_chat_model(model="gpt-5", model_provider="openai")
+        # Create one LLM per provider so we can switch at request time
+        self._llms = {
+            name: init_chat_model(
+                model=cfg["primary_model"],
+                model_provider=cfg["model_provider"],
+            )
+            for name, cfg in PROVIDERS.items()
+        }
         # Full tool lookup dict — used for dispatching tool calls at runtime
         self.all_tools = {t.name: t for t in ALL_TOOLS}
+
+    def _resolve_tool_name(self, name: str) -> str:
+        """Resolve a tool name, handling duplicated names from streaming chunk concatenation.
+
+        When LangChain accumulates AIMessageChunk objects via ``+``, tool-call
+        name strings can be concatenated (e.g. ``get_tab_contentget_tab_content``).
+        This helper detects that pattern and returns the correct single name.
+        """
+        if name in self.all_tools:
+            return name
+        for known in self.all_tools:
+            if (
+                len(name) > len(known)
+                and len(name) % len(known) == 0
+                and name == known * (len(name) // len(known))
+            ):
+                return known
+        raise KeyError(f"Unknown tool: {name}")
 
     def _build_messages(
         self,
@@ -76,7 +102,7 @@ class EvolveAgent:
         current_project_dir.set(project_dir)
         return project_dir
 
-    def _prepare_request(self, project_id: str):
+    def _prepare_request(self, project_id: str, provider: str = "openai"):
         """Set context, start background build if needed, return (bound_llm, cs_available).
 
         Determines whether the codebase_search tool should be exposed for this
@@ -86,13 +112,15 @@ class EvolveAgent:
         from utils.graph_rag import is_index_ready, start_background_build
 
         project_dir = self._set_project_context(project_id)
+        current_provider.set(provider)
 
         cs_available = is_index_ready(project_dir)
         if not cs_available:
             start_background_build(project_dir)
 
         tools_list = get_available_tools(include_codebase_search=cs_available)
-        bound_llm = self._base_llm.bind_tools(tools_list)
+        base_llm = self._llms.get(provider, self._llms["openai"])
+        bound_llm = base_llm.bind_tools(tools_list)
 
         return bound_llm, cs_available
 
@@ -101,24 +129,30 @@ class EvolveAgent:
         history: list[dict],
         project_id: str,
         rules: list[str] | None = None,
+        provider: str = "openai",
     ) -> str:
         """Send conversation history to the LLM, execute any tool calls, and return the final reply."""
-        bound_llm, cs_available = self._prepare_request(project_id)
+        bound_llm, cs_available = self._prepare_request(project_id, provider=provider)
         messages = self._build_messages(history, codebase_search_available=cs_available, rules=rules)
 
         while True:
             response = await bound_llm.ainvoke(messages)
+            # Some providers (e.g. NVIDIA) reject empty-string content.
+            if not response.content:
+                response.content = "\u200b"
             messages.append(response)
 
             if not response.tool_calls:
                 return response.content
 
             for tool_call in response.tool_calls:
-                tool = self.all_tools[tool_call["name"]]
+                resolved_name = self._resolve_tool_name(tool_call["name"])
+                tool = self.all_tools[resolved_name]
                 result = await tool.ainvoke(tool_call["args"])
-                print(f"[tool:{tool_call['name']}] {result}")
+                print(f"[tool:{resolved_name}] {result}")
+                tool_content = str(result) or "(No output)"
                 messages.append(
-                    ToolMessage(content=str(result), tool_call_id=tool_call["id"])
+                    ToolMessage(content=tool_content, tool_call_id=tool_call["id"])
                 )
 
     async def stream_chat_response(
@@ -128,6 +162,7 @@ class EvolveAgent:
         active_tabs: list[dict] | None = None,
         pending_tab_requests: dict | None = None,
         rules: list[str] | None = None,
+        provider: str = "openai",
     ) -> AsyncGenerator[dict, None]:
         """Stream conversation history to the LLM, execute tool calls, and yield event dicts.
 
@@ -137,7 +172,7 @@ class EvolveAgent:
         - {"type": "tool_end", "name": "..."} when a tool finishes
         - {"type": "request_tab_content", ...} when a tool needs browser data
         """
-        bound_llm, cs_available = self._prepare_request(project_id)
+        bound_llm, cs_available = self._prepare_request(project_id, provider=provider)
         messages = self._build_messages(
             history,
             codebase_search_available=cs_available,
@@ -167,14 +202,19 @@ class EvolveAgent:
             if full_response is None:
                 return
 
+            # Some providers (e.g. NVIDIA) reject empty-string content.
+            # When the LLM only produces tool calls, content is "".
+            if not full_response.content:
+                full_response.content = "\u200b"
             messages.append(full_response)
 
             if not full_response.tool_calls:
                 return
 
             for tool_call in full_response.tool_calls:
-                tool = self.all_tools[tool_call["name"]]
-                yield {"type": "tool_start", "name": tool_call["name"], "args": tool_call["args"]}
+                resolved_name = self._resolve_tool_name(tool_call["name"])
+                tool = self.all_tools[resolved_name]
+                yield {"type": "tool_start", "name": resolved_name, "args": tool_call["args"]}
 
                 # Run the tool concurrently with draining the outbound queue,
                 # so request_tab_content events are yielded while the tool awaits.
@@ -192,10 +232,11 @@ class EvolveAgent:
                 while not outbound.empty():
                     yield outbound.get_nowait()
 
-                print(f"[tool:{tool_call['name']}] {result}")
-                yield {"type": "tool_end", "name": tool_call["name"]}
+                print(f"[tool:{resolved_name}] {result}")
+                yield {"type": "tool_end", "name": resolved_name}
+                tool_content = str(result) or "(No output)"
                 messages.append(
-                    ToolMessage(content=str(result), tool_call_id=tool_call["id"])
+                    ToolMessage(content=tool_content, tool_call_id=tool_call["id"])
                 )
 
             # All tool calls done; LLM will process results next iteration

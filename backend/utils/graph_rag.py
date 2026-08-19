@@ -17,16 +17,14 @@ from typing import Optional
 
 import networkx as nx
 import numpy as np
-from openai import AsyncOpenAI
+
+from utils.config import current_provider, get_embedding_model, get_secondary_client, get_secondary_model
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-EMBEDDING_MODEL = "text-embedding-3-small"
-EXTRACTION_MODEL = "gpt-4o-mini"
 CHUNK_SIZE = 60  # lines per chunk
 CHUNK_OVERLAP = 10  # overlap between consecutive chunks
 TOP_K_VECTOR = 10  # initial vector search candidates
@@ -155,31 +153,27 @@ def _compute_project_fingerprint(project_dir: Path) -> str:
 class CodeGraphIndex:
     """In-memory Graph RAG index for a single project."""
 
-    def __init__(self) -> None:
+    def __init__(self, provider: str = "openai") -> None:
         self.graph: nx.DiGraph = nx.DiGraph()
         # Parallel arrays for fast batch cosine similarity
         self._chunk_ids: list[str] = []
         self._embedding_matrix: np.ndarray | None = None
         self.fingerprint: str = ""
         self.built_at: float = 0.0
-        self._client: AsyncOpenAI | None = None
-
-    def _get_client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client = AsyncOpenAI()
-        return self._client
+        self._provider = provider
 
     # -- Embedding ---------------------------------------------------------
 
     async def _embed_texts(self, texts: list[str]) -> list[np.ndarray]:
-        """Embed a batch of texts via OpenAI (batched in groups of 100)."""
+        """Embed a batch of texts (batched in groups of 100)."""
         if not texts:
             return []
-        client = self._get_client()
+        client = get_secondary_client(self._provider)
+        embedding_model = get_embedding_model(self._provider)
         all_embeddings: list[np.ndarray] = []
         for i in range(0, len(texts), 100):
             batch = texts[i : i + 100]
-            resp = await client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
+            resp = await client.embeddings.create(model=embedding_model, input=batch)
             all_embeddings.extend(np.array(d.embedding) for d in resp.data)
         return all_embeddings
 
@@ -188,11 +182,12 @@ class CodeGraphIndex:
     async def _extract_entities(self, file_path: str, content: str) -> dict:
         """Use an LLM to extract entities and relationships from a source file."""
         try:
-            client = self._get_client()
+            client = get_secondary_client(self._provider)
+            model = get_secondary_model(self._provider)
             # Truncate large files to stay within token budget
             truncated = content[:8000] if len(content) > 8000 else content
             resp = await client.chat.completions.create(
-                model=EXTRACTION_MODEL,
+                model=model,
                 messages=[
                     {"role": "system", "content": EXTRACT_PROMPT},
                     {
@@ -502,8 +497,10 @@ _index_cache: dict[str, CodeGraphIndex] = {}
 _build_in_progress: set[str] = set()
 
 
-async def get_or_build_index(project_dir: Path) -> CodeGraphIndex:
+async def get_or_build_index(project_dir: Path, provider: str | None = None) -> CodeGraphIndex:
     """Return cached index, rebuilding only when project files have changed."""
+    if provider is None:
+        provider = current_provider.get("openai")
     key = str(project_dir)
     current_fp = _compute_project_fingerprint(project_dir)
 
@@ -512,7 +509,7 @@ async def get_or_build_index(project_dir: Path) -> CodeGraphIndex:
         logger.info("Graph RAG index cache hit for %s", project_dir)
         return cached
 
-    index = CodeGraphIndex()
+    index = CodeGraphIndex(provider=provider)
     await index.build_index(project_dir)
     _index_cache[key] = index
     return index
@@ -538,12 +535,14 @@ def is_index_building(project_dir: Path) -> bool:
     return str(project_dir) in _build_in_progress
 
 
-def start_background_build(project_dir: Path) -> None:
+def start_background_build(project_dir: Path, provider: str | None = None) -> None:
     """Kick off a background index build if not already built or building.
 
     Safe to call from any async context — the build runs as a fire-and-forget
     asyncio task.
     """
+    if provider is None:
+        provider = current_provider.get("openai")
     key = str(project_dir)
     if is_index_ready(project_dir) or key in _build_in_progress:
         return
@@ -552,7 +551,7 @@ def start_background_build(project_dir: Path) -> None:
 
     async def _do_build() -> None:
         try:
-            index = CodeGraphIndex()
+            index = CodeGraphIndex(provider=provider)
             await index.build_index(project_dir)
             _index_cache[key] = index
             logger.info("Background graph index build complete for %s", project_dir)

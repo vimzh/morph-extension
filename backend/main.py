@@ -6,11 +6,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from utils.agent import EvolveAgent
 from utils.companion import load_extension_via_os
+from utils.config import get_secondary_client, get_secondary_model
 from utils.db import (
     create_conversation,
     create_project,
@@ -31,14 +31,17 @@ from utils.tools import DEMO_CODE_BASE
 
 logger = logging.getLogger(__name__)
 
-_openai_client = AsyncOpenAI()
 agent = EvolveAgent()
 
 
-async def generate_conversation_title(user_message: str, assistant_message: str) -> str:
+async def generate_conversation_title(
+    user_message: str, assistant_message: str, provider: str = "openai"
+) -> str:
     """Generate a short conversation title from the first message exchange."""
-    response = await _openai_client.chat.completions.create(
-        model="gpt-4o-mini",
+    client = get_secondary_client(provider)
+    model = get_secondary_model(provider)
+    response = await client.chat.completions.create(
+        model=model,
         messages=[
             {
                 "role": "system",
@@ -241,6 +244,7 @@ async def ws_chat(websocket: WebSocket, project_id: str):
             query = data["query"]
             conversation_id = data.get("conversation_id")
             active_tabs = data.get("active_tabs")
+            provider = data.get("provider", "openai")
 
             if conversation_id:
                 conv_id = conversation_id
@@ -267,6 +271,7 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                     active_tabs=active_tabs,
                     pending_tab_requests=pending_tab_requests,
                     rules=rules,
+                    provider=provider,
                 ):
                     if event["type"] == "content":
                         collected.append(event["content"])
@@ -286,10 +291,11 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                 if not conversation_id:
 
                     async def _generate_and_send_title(
-                        ws: WebSocket, cid: str, user_msg: str, asst_msg: str
+                        ws: WebSocket, cid: str, user_msg: str, asst_msg: str,
+                        prov: str = "openai",
                     ):
                         try:
-                            title = await generate_conversation_title(user_msg, asst_msg)
+                            title = await generate_conversation_title(user_msg, asst_msg, provider=prov)
                             await update_conversation_title(cid, title)
                             await ws.send_json(
                                 {
@@ -302,7 +308,7 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                             logger.exception("Failed to generate conversation title")
 
                     asyncio.create_task(
-                        _generate_and_send_title(websocket, conv_id, query, content)
+                        _generate_and_send_title(websocket, conv_id, query, content, provider)
                     )
 
                 # Extract rules from the conversation in the background
@@ -311,9 +317,10 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                     pid: str,
                     conv_history: list[dict],
                     existing_rules: list[str],
+                    prov: str = "openai",
                 ):
                     try:
-                        new_rules = await extract_rules(conv_history, existing_rules)
+                        new_rules = await extract_rules(conv_history, existing_rules, provider=prov)
                         if new_rules:
                             created = await save_rules(pid, new_rules)
                             await ws.send_json(
@@ -326,7 +333,7 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                 full_history = history + [{"role": "assistant", "content": content}]
                 asyncio.create_task(
                     _extract_and_save_rules(
-                        websocket, project_id, full_history, rules
+                        websocket, project_id, full_history, rules, provider
                     )
                 )
             except WebSocketDisconnect:

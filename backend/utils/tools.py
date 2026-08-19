@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.tools import tool
-from openai import AsyncOpenAI
+
+from utils.config import current_provider, get_secondary_client, get_secondary_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -284,14 +285,14 @@ Rules:
 - Return ONLY the raw file content — no explanations, no markdown fences.
 - Preserve exact indentation and formatting of unchanged code."""
 
-_openai_client: AsyncOpenAI | None = None
+def _get_secondary_client():
+    """Return an OpenAI-compatible client for the current provider."""
+    return get_secondary_client()
 
 
-def _get_openai_client() -> AsyncOpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = AsyncOpenAI()
-    return _openai_client
+def _get_secondary_model() -> str:
+    """Return the secondary model name for the current provider."""
+    return get_secondary_model()
 
 
 @tool
@@ -319,9 +320,9 @@ async def edit_file(target_file: str, instructions: str, code_edit: str) -> str:
 
         original_content = resolved.read_text(encoding="utf-8", errors="replace")
 
-        client = _get_openai_client()
+        client = _get_secondary_client()
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=_get_secondary_model(),
             messages=[
                 {"role": "system", "content": EDIT_APPLY_PROMPT},
                 {
