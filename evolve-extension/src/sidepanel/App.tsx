@@ -32,6 +32,7 @@ type TabMatch = {
 type MessagePart =
   | { type: 'text'; content: string }
   | { type: 'tool'; name: string; label: string; status: 'running' | 'done'; favIconUrl?: string }
+  | { type: 'extension_ready'; path: string }
 
 type DisplayPart =
   | { type: 'text'; content: string }
@@ -94,6 +95,123 @@ function getToolLabel(
   }
 }
 
+// --- Extension install card with auto-load support ---
+type InstallCardState = 'idle' | 'loading' | 'success' | 'error'
+
+function ExtensionInstallCard({ path, projectId }: { path: string; projectId?: string }) {
+  const [state, setState] = useState<InstallCardState>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const handleLoad = async () => {
+    if (!projectId) return
+    setState('loading')
+    setErrorMsg('')
+    try {
+      const res = await fetch(`${API_URL}/api/load-extension/${projectId}`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setState('success')
+      } else {
+        setState('error')
+        setErrorMsg(data.error || 'Automation failed.')
+      }
+    } catch {
+      setState('error')
+      setErrorMsg('Could not reach the backend server.')
+    }
+  }
+
+  const handleCopyPath = () => {
+    navigator.clipboard.writeText(path)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="extension-install-card">
+      <div className="extension-install-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+        <span>Extension ready to install</span>
+      </div>
+      <div className="extension-install-path">{path}</div>
+
+      {state === 'idle' && (
+        <div className="extension-install-actions">
+          <button
+            className="extension-install-btn extension-install-btn-primary"
+            onClick={handleLoad}
+            disabled={!projectId}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+            Load Extension
+          </button>
+        </div>
+      )}
+
+      {state === 'loading' && (
+        <div className="extension-install-actions">
+          <button className="extension-install-btn extension-install-btn-loading" disabled>
+            <svg className="tool-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            Loading extension...
+          </button>
+        </div>
+      )}
+
+      {state === 'success' && (
+        <div className="extension-install-status extension-install-success">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Extension loaded into Chrome
+        </div>
+      )}
+
+      {state === 'error' && (
+        <>
+          <div className="extension-install-status extension-install-error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            {errorMsg}
+          </div>
+          <div className="extension-install-fallback">Load manually instead:</div>
+          <div className="extension-install-actions">
+            <button className="extension-install-btn" onClick={handleCopyPath}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              {copied ? 'Copied!' : 'Copy path'}
+            </button>
+            <button
+              className="extension-install-btn extension-install-btn-primary"
+              onClick={() => chrome.tabs.create({ url: 'chrome://extensions' })}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Open Extensions page
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Sidepanel chat UI with inline, coalesced selection chips inside a contenteditable editor.
 export default function App() {
   // Project state
@@ -108,6 +226,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [thinking, setThinking] = useState(false)
   const [error, setError] = useState('')
   const [openChipKey, setOpenChipKey] = useState<string | null>(null)
   const [inputChipPreview, setInputChipPreview] = useState<{
@@ -1241,6 +1360,7 @@ export default function App() {
       if (messageHandlerRef.current) {
         setError('Connection lost')
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
       }
       wsRef.current = null
@@ -1413,6 +1533,7 @@ export default function App() {
     }
     setInputChipPreview(null)
     setLoading(true)
+    setThinking(false)
     setError('')
 
     // Optimistically add user message
@@ -1500,8 +1621,15 @@ export default function App() {
         return
       }
 
+      // Agent is thinking (between tool calls and next LLM response)
+      if (data.type === 'thinking') {
+        setThinking(true)
+        return
+      }
+
       // Tool started
       if (data.type === 'tool_start') {
+        setThinking(false)
         const { label, favIconUrl } = getToolLabel(data.name, data.args || {}, tabsMapRef.current)
         parts.push({ type: 'tool', name: data.name, label, status: 'running', favIconUrl })
         ensureAssistantMessage()
@@ -1522,8 +1650,17 @@ export default function App() {
         return
       }
 
+      // Extension ready for install
+      if (data.type === 'extension_ready') {
+        parts.push({ type: 'extension_ready', path: data.path })
+        ensureAssistantMessage()
+        updateAssistantMessage()
+        return
+      }
+
       // Streaming content chunk
       if (data.type === 'content') {
+        setThinking(false)
         accumulated += data.content
         const last = parts[parts.length - 1]
         if (last && last.type === 'text') {
@@ -1540,6 +1677,7 @@ export default function App() {
       if (data.type === 'error') {
         setError(data.message || 'Something went wrong')
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
         if (!assistantAdded) {
           setMessages((prev) => {
@@ -1578,6 +1716,7 @@ export default function App() {
           fetchConversations(activeProject.id)
         }
         setLoading(false)
+        setThinking(false)
         messageHandlerRef.current = null
       }
     }
@@ -1858,6 +1997,8 @@ export default function App() {
                       )}
                       <span className="tool-call-label">{part.label}</span>
                     </div>
+                  ) : part.type === 'extension_ready' ? (
+                    <ExtensionInstallCard key={j} path={part.path} projectId={activeProject?.id} />
                   ) : (
                     <div key={j} className="message-content">
                       <ReactMarkdown>{part.content}</ReactMarkdown>
@@ -1947,6 +2088,13 @@ export default function App() {
                 <span className="dot" />
                 <span className="dot" />
               </div>
+            </div>
+          )}
+          {thinking && !loading && (
+            <div className="thinking-indicator">
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
             </div>
           )}
           <div ref={messagesEndRef} />
