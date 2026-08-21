@@ -1,54 +1,129 @@
-# Morph
+<p align="center">
+  <img src="morph-extension/public/morph-logo-128.png" width="96" alt="Morph logo" />
+</p>
 
-## Inspiration
-Web browsing is static. Browsers and websites treat all of their users almost exactly the same, but there isn't a one-size fits all for the billions who use the internet. If a user wants some feature added or changed (e.g. hiding all YouTube shorts when visiting the website to avoid distraction), they must either: (i) hope the browser/website developer can and are willing to make it for them, (ii) hope and trust someone made a Chrome extension for their exact use case (without charging an arm and a leg), or (iii) have the time and expertise to make it themself.
+<h1 align="center">Morph: Your AI Browser Extension Builder</h1>
 
-We believe we need to stop constraining users with this one-size fits all mindset. As such, we built **Morph**, a fork of __Chromium__ (and __Chrome Extension__) which makes customizing your browsing experience as easy as sending a single message.
+<p align="center">
+  Describe a browser problem in plain language, then build and test a Chrome extension that solves it.
+</p>
 
-## What it does
-**Morph** pairs an advanced coding agent with complete browser context. This AI agent codes extensions which are loaded directly into the user's browser in real-time. Here are some cool extensions we created for ourselves or that our friends requested using **Morph** (these all took only 1-2 prompts):
+<!-- README-HACK:NEEDS-OWNER key="demo-video" instruction="Replace with the final public demo video URL when available." -->
 
--  Alastair's YouTube filter: When visiting YouTube.com, hide all YouTube shorts and all videos which have any League of Legends keywords in their title between 9 AM - 5 PM.
+## The idea
 
-- Haley's Email Manager: Stanford students get a lot of spam (and are forced to use Outlook), Haley wanted an extension which will help her quickly delete all her spam emails.
+Browsers are built for the average user, but nobody browses in exactly the same way. Someone may want to hide YouTube Shorts, remove distracting listings, make a page easier to read, or add a workflow that a website never shipped.
 
-- Antonio's Ad Blocker: Chrome banned uBlock Origin (Antonio's favorite ad blocker), but Antonio doesn't want to switch browsers. Antonio uses **Morph** to create a custom ad blocker for his most visited sites (and if he ever wants to extend its ad-blocking capabilities to new sites he can just tell **Morph** to update the extension).
+Today, solving that problem usually means learning JavaScript and Chrome's extension APIs, finding a trustworthy extension, or giving up. Morph makes the useful middle ground conversational: describe the behavior, inspect the result, and iterate on it without starting from a blank project.
 
-## How we built it
-![Agent Flow Diagram](./media/agent-flow-real.png)
+## What Morph does
 
-Very high-level agent breakdown:
-- GPT-5.2 performs the main reasoning, deciding whether to answer directly or call tools.
-- Context tools enhance responses using graph-based RAG over the extension codebase and, when useful, live browser context retrieved via WebSocket.
-- The knowledge graph is built offline by chunking the codebase, extracting entities and relationships with GPT-5-Nano, and generating embeddings with text-embedding-3-small.
-- When actions are required, coding tools (sandboxed terminal, linter, testing sandbox, and code editor) execute tasks, sometimes assisted by a smaller secondary LLM.
-- The primary model synthesizes everything into the final response, which is streamed back to the chat and auto-reloaded browser extension.
-- A secondary model extracts rules / memories from the overall conversation for future conversations about this extension.
+Morph is a Chrome side-panel experience backed by an AI coding agent. A user describes a browser task and Morph:
 
-## INSTALLATION INSTRUCTIONS (for Chrome extension)
+1. Creates a project workspace for the request.
+2. Writes a Manifest V3 extension, including content scripts and supporting files.
+3. Uses browser context when the request depends on the current page or open tabs.
+4. Validates the manifest, files, syntax, and extension structure.
+5. Builds the extension and presents an install action in the UI.
+6. Keeps the conversation available so the user can request a focused change.
 
-Get backend ready.
-1. `cd backend`
-2. `uv sync`
-3. `uv run main.py`
+The generated result is ordinary Chrome extension code—not a locked-in visual mockup—so it can be inspected, loaded unpacked, and extended later.
 
-The backend defaults to port `8001`. Set `MORPH_PORT` and the extension's
-`VITE_API_URL` if you need a different port.
+<p align="center">
+  <img src="docs/graphs/morph-extension-flow.svg" alt="Morph user flow from a browser task through agentic coding and validation to an installable extension and iterative refinement." width="1100" />
+</p>
 
-Get extension ready.
-1. `cd morph-extension`
-2. `npm install`
-3. `npm run dev`
-4. In Chrome, go to `chrome://extensions/`
-5. Turn on Developer mode
-6. Click `Load Unpacked`
-7. Select the `dist` folder inside of `morph-extension`
+## Examples in the repository
 
-NOTE: One-click load for extensions does not work for non-Macs
+These examples show the kind of practical browser customizations Morph can produce:
 
-Mac Instructions:
- - Go to Chrome. Click `View > Developer > Allow JavaScript from Apple Events`
+| Example | What it demonstrates |
+| --- | --- |
+| YouTube filter | Hides Shorts and filters videos by title keywords. |
+| Email manager | Adds a focused workflow for removing unwanted email. |
+| Site-specific ad blocker | Removes unwanted sponsored or advertising elements on selected sites. |
 
-Non-Mac Instructions:
- - Extensions are created inside of `./backend/demo_code`
- - Follow the `Load Unpacked` instructions from above to load in extensions.
+## Why it is useful
+
+Morph is aimed at people who know exactly what they want their browser to do, but do not want to become browser-extension developers first. It is useful for:
+
+- Personal accessibility and reading preferences
+- Removing distracting or repetitive page elements
+- Small research and productivity workflows
+- Site-specific automation that does not justify a full application
+- Prototyping an extension before turning it into a maintained product
+
+The important product loop is generate → validate → load → observe → refine. A successful build is not treated as proof that a selector works everywhere, so browser behavior and runtime errors remain part of the workflow.
+
+## How it works
+
+The Chrome extension provides the side-panel chat, project controls, page context, and install handoff. The FastAPI backend maintains projects, conversations, and learned per-project rules while coordinating the coding agent over a bidirectional WebSocket.
+
+The agent can inspect files, search the project semantically, read current tab content, capture console logs, edit files, validate an extension, run terminal commands, and load the finished workspace. The codebase search uses a graph-and-vector index: files are chunked, entities and relationships are extracted, embeddings retrieve relevant chunks, and graph traversal adds nearby context.
+
+![Morph agent architecture](media/agent-flow-real.png)
+
+The primary agent uses OpenAI's `gpt-5.2`; supporting tasks use `gpt-5-nano-2025-08-07`, and semantic retrieval uses `text-embedding-3-small`. The provider and model configuration live in `backend/utils/config.py`.
+
+## Built with
+
+- React 19, TypeScript, and Vite
+- Chrome Manifest V3, Side Panel API, content scripts, and tabs API
+- FastAPI, Uvicorn, WebSockets, and Pydantic
+- OpenAI models and embeddings through LangChain/OpenAI clients
+- SQLite with `aiosqlite`
+- NetworkX and NumPy for graph and vector retrieval
+- Tailwind CSS and shadcn/ui primitives
+
+## Run locally
+
+### 1. Start the backend
+
+```bash
+cd backend
+uv sync
+export OPENAI_API_KEY="your-key"
+uv run main.py
+```
+
+The backend listens on port `8001` by default. Set `MORPH_PORT` to change it.
+
+### 2. Build the extension
+
+In a second terminal:
+
+```bash
+cd morph-extension
+npm install
+npm run build
+```
+
+Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `morph-extension/dist`.
+
+If the backend runs on another URL, set `VITE_API_URL` when building the extension, for example:
+
+```bash
+VITE_API_URL=http://localhost:9001 npm run build
+```
+
+On macOS, the optional one-click Chrome loading flow also requires Chrome's **Allow JavaScript from Apple Events** setting. Otherwise, load generated extensions manually from `backend/demo_code`.
+
+## What works today
+
+The repository contains the working side panel, project and conversation persistence, streamed agent/tool updates, browser-context requests, semantic codebase search, extension validation, build/install handoff, and regression tests for title generation, memory boundaries, graph retrieval, and closed WebSocket updates.
+
+Generated extensions still depend on the structure and runtime behavior of the websites they target. Users should review requested permissions and test generated behavior before relying on it for important workflows.
+
+## What's next
+
+- Stronger selectors and mutation handling for frequently changing sites
+- Accessibility-first templates, including dyslexia-friendly reading modes
+- Safer permission explanations and narrower host permissions
+- Extension version history and one-click updates
+- More model providers, including local and self-hosted options
+- A shareable library for discovering and remixing extensions
+- Automated regression checks when a target website changes
+
+## Repository
+
+[github.com/vimzh/morph-extension](https://github.com/vimzh/morph-extension)
