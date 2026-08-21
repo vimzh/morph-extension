@@ -1,4 +1,4 @@
-# Evolve Browser — Agent Architecture
+# Morph — Agent Architecture
 
 > An AI-powered browser that builds its own Chrome extensions. The agent reasons, writes code, searches semantically, reads your tabs, remembers your preferences, and installs extensions — all in a multi-turn conversational loop.
 
@@ -9,7 +9,6 @@
 ```mermaid
 flowchart TD
     classDef openai fill:#10a37f,color:#fff,stroke:#0d8c6d
-    classDef nvidia fill:#76b900,color:#fff,stroke:#5a8f00
     classDef browser fill:#4285f4,color:#fff,stroke:#3367d6
     classDef tool fill:#ff6d00,color:#fff,stroke:#e65100
     classDef memory fill:#ab47bc,color:#fff,stroke:#8e24aa
@@ -37,32 +36,20 @@ flowchart TD
         REST["REST API<br/><i>projects · conversations · rules</i>"]
 
         %% ─── AGENT CORE ─────────────────────────────────────────────
-        subgraph AGENT_CORE ["🤖 EvolveAgent — Agentic Loop"]
+        subgraph AGENT_CORE ["🤖 CodingAgent — Agentic Loop"]
             direction TB
-            ROUTER{"Provider<br/>Router"}:::agent
+            GPT5["<b>GPT-5.2</b><br/>Primary Agent<br/><i>reasoning · planning<br/>tool orchestration</i>"]:::openai
             PROMPT["System Prompt Builder<br/><i>+ active tabs + memory rules<br/>+ tool availability</i>"]:::agent
             STREAM["Streaming Tool Loop<br/><i>plan → act → observe → repeat</i>"]:::agent
 
-            ROUTER --> PROMPT --> STREAM
+            GPT5 --> PROMPT --> STREAM
         end
 
-        %% ─── DUAL MODEL STACK ────────────────────────────────────────
-        subgraph MODELS ["🧠 Dual-Provider Model Stack"]
-            direction LR
-            subgraph OAI ["OpenAI"]
-                GPT5["<b>GPT-5</b><br/>Primary Agent<br/><i>reasoning · planning<br/>tool orchestration</i>"]:::openai
-                GPT4OMINI["<b>GPT-4o-mini</b><br/>Secondary<br/><i>code edits · titles<br/>rules · entities</i>"]:::openai
-                EMB_OAI["<b>text-embedding-3-small</b><br/>Embeddings"]:::openai
-            end
-            subgraph NV ["NVIDIA Nemotron"]
-                NEM_SUPER["<b>Nemotron Super 49B</b><br/>Primary Agent<br/><i>reasoning · planning<br/>tool orchestration</i>"]:::nvidia
-                NEM_NANO["<b>Nemotron Nano 8B</b><br/>Secondary<br/><i>code edits · titles<br/>rules · entities</i>"]:::nvidia
-                EMB_NV["<b>NV-EmbedQA-E5-v5</b><br/>Embeddings"]:::nvidia
-            end
+        %% ─── SUPPORTING MODELS ───────────────────────────────────────
+        subgraph MODELS ["🧠 Supporting OpenAI Models"]
+            GPT5NANO["<b>GPT-5 Nano</b><br/>Secondary<br/><i>code edits · titles<br/>rules · entities</i>"]:::openai
+            EMB_OAI["<b>text-embedding-3-small</b><br/>Embeddings"]:::openai
         end
-
-        ROUTER -->|"openai"| GPT5
-        ROUTER -->|"nvidia"| NEM_SUPER
 
         %% ─── TOOL SYSTEM ────────────────────────────────────────────
         subgraph TOOLS ["🔧 Tool System — 11 Tools"]
@@ -112,12 +99,9 @@ flowchart TD
         CSEARCH --> SEARCH_PIPE
         BUILD_G --> KG
         GRAPH_EXP --> KG
-        ENT_EX -.->|"secondary LLM"| GPT4OMINI
-        ENT_EX -.->|"secondary LLM"| NEM_NANO
+        ENT_EX -.->|"secondary LLM"| GPT5NANO
         EMB_CH -.-> EMB_OAI
-        EMB_CH -.-> EMB_NV
         EMB_Q -.-> EMB_OAI
-        EMB_Q -.-> EMB_NV
 
         %% ─── MEMORY SYSTEM ──────────────────────────────────────────
         subgraph MEMORY ["🧠 Agent Memory System"]
@@ -128,8 +112,7 @@ flowchart TD
             RULE_EX --> RULE_DB --> RULE_INJ
         end
 
-        RULE_EX -.->|"secondary LLM"| GPT4OMINI
-        RULE_EX -.->|"secondary LLM"| NEM_NANO
+        RULE_EX -.->|"secondary LLM"| GPT5NANO
         RULE_INJ --> PROMPT
 
         %% ─── STORAGE ────────────────────────────────────────────────
@@ -146,8 +129,7 @@ flowchart TD
     GET_LOGS -->|"request_console_logs<br/>via outbound queue"| WS_EP
     LOAD -->|"extension_ready<br/>via outbound queue"| WS_EP
 
-    EDIT -.->|"secondary LLM"| GPT4OMINI
-    EDIT -.->|"secondary LLM"| NEM_NANO
+    EDIT -.->|"secondary LLM"| GPT5NANO
 
     FS_TOOLS --> FS
     TERM --> FS
@@ -170,7 +152,7 @@ sequenceDiagram
     participant User as 👤 User
     participant SP as 📱 Sidepanel
     participant WS as 🔌 WebSocket
-    participant Agent as 🤖 EvolveAgent
+    participant Agent as 🤖 CodingAgent
     participant Tools as 🔧 Tools
     participant Memory as 🧠 Memory
     participant DB as 💾 SQLite
@@ -338,55 +320,26 @@ flowchart TB
 
 ---
 
-## 4. Dual-Provider Model Architecture
+## 4. OpenAI Model Architecture
 
-> *Targeting: OpenAI — Best Use of OpenAI API + NVIDIA — Best Use of NVIDIA Open Models*
+> *Targeting: OpenAI — Best Use of OpenAI API*
 
 ```mermaid
 flowchart LR
     classDef openai fill:#10a37f,color:#fff,stroke:#0d8c6d
-    classDef nvidia fill:#76b900,color:#fff,stroke:#5a8f00
-    classDef config fill:#ff6d00,color:#fff
-
-    subgraph CONFIG ["⚙️ config.py — Centralized Provider Config"]
-        direction TB
-        SWITCH{"Runtime<br/>Provider<br/>Switch<br/><i>(per-request)</i>"}:::config
-    end
-
     subgraph OPENAI_STACK ["OpenAI Stack"]
         direction TB
-        GPT5["<b>GPT-5</b><br/><i>Primary Agent LLM</i><br/>reasoning · planning<br/>11-tool orchestration<br/>multi-step coding"]:::openai
+        GPT5["<b>GPT-5.2</b><br/><i>Primary Agent LLM</i><br/>reasoning · planning<br/>11-tool orchestration<br/>multi-step coding"]:::openai
         
-        GPT4O["<b>GPT-4o-mini</b><br/><i>Secondary LLM (4 use cases)</i>"]:::openai
+        GPT5NANO["<b>GPT-5 Nano</b><br/><i>Secondary LLM (4 use cases)</i>"]:::openai
         
         EMB_O["<b>text-embedding-3-small</b><br/><i>Graph RAG Embeddings</i>"]:::openai
 
-        GPT4O --- U1["① edit_file — code merge"]
-        GPT4O --- U2["② Title generation"]
-        GPT4O --- U3["③ Rule extraction (memory)"]
-        GPT4O --- U4["④ Entity extraction (Graph RAG)"]
+        GPT5NANO --- U1["① edit_file — code merge"]
+        GPT5NANO --- U2["② Title generation"]
+        GPT5NANO --- U3["③ Rule extraction (memory)"]
+        GPT5NANO --- U4["④ Entity extraction (Graph RAG)"]
     end
-
-    subgraph NVIDIA_STACK ["NVIDIA Nemotron Stack"]
-        direction TB
-        NEM_S["<b>Llama 3.3 Nemotron<br/>Super 49B</b><br/><i>Primary Agent LLM</i><br/>reasoning · planning<br/>11-tool orchestration<br/>multi-step coding"]:::nvidia
-        
-        NEM_N["<b>Nemotron Nano 8B</b><br/><i>Secondary LLM (4 use cases)</i>"]:::nvidia
-        
-        EMB_N["<b>NV-EmbedQA-E5-v5</b><br/><i>Graph RAG Embeddings</i>"]:::nvidia
-
-        NEM_N --- N1["① edit_file — code merge"]
-        NEM_N --- N2["② Title generation"]
-        NEM_N --- N3["③ Rule extraction (memory)"]
-        NEM_N --- N4["④ Entity extraction (Graph RAG)"]
-    end
-
-    SWITCH -->|"provider=openai"| GPT5
-    SWITCH -->|"provider=openai"| GPT4O
-    SWITCH -->|"provider=openai"| EMB_O
-    SWITCH -->|"provider=nvidia"| NEM_S
-    SWITCH -->|"provider=nvidia"| NEM_N
-    SWITCH -->|"provider=nvidia"| EMB_N
 
     subgraph API_COMPAT ["🔌 API Compatibility Layer"]
         LC["LangChain<br/>init_chat_model()<br/>bind_tools()"]
@@ -394,11 +347,8 @@ flowchart LR
     end
 
     GPT5 --> LC
-    NEM_S --> LC
-    GPT4O --> AOAI
-    NEM_N --> AOAI
+    GPT5NANO --> AOAI
     EMB_O --> AOAI
-    EMB_N --> AOAI
 ```
 
 ---
@@ -475,7 +425,7 @@ flowchart LR
         PANEL["Sidepanel<br/><i>React Chat UI</i>"]:::fe
         
         subgraph SEND ["Messages → Backend"]
-            S1["chat: query + active_tabs + provider"]
+            S1["chat: query + active_tabs"]
             S2["tab_content_response: page text/HTML"]
             S3["console_logs_response: log entries"]
         end
@@ -503,7 +453,7 @@ flowchart LR
     end
 
     subgraph BACKEND_CORE ["Agent Core"]
-        AGENT2["EvolveAgent<br/>Streaming Loop"]:::be
+        AGENT2["CodingAgent<br/>Streaming Loop"]:::be
         TOOL_SYS["Tool System<br/><i>contextvars for async state</i>"]:::be
     end
 
@@ -593,9 +543,7 @@ flowchart TD
 
 | Feature | Implementation | Prize Relevance |
 |---------|---------------|-----------------|
-| **Multi-model orchestration** | GPT-5 primary + GPT-4o-mini secondary (4 use cases) + embeddings | OpenAI |
-| **Full NVIDIA stack** | Nemotron Super 49B + Nano 8B + NV-EmbedQA-E5 — zero OpenAI deps | NVIDIA |
-| **Runtime provider switching** | Centralized config.py, per-request contextvars | OpenAI + NVIDIA |
+| **Multi-model orchestration** | GPT-5.2 primary + GPT-5 Nano secondary (4 use cases) + embeddings | OpenAI |
 | **Graph RAG search** | NetworkX knowledge graph + vector embeddings + BFS traversal | All |
 | **Agent memory** | Background rule extraction → SQLite → system prompt injection | Conversational |
 | **11-tool agentic loop** | Plan → Act → Observe → Repeat with streaming | All |
