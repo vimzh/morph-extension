@@ -8,7 +8,7 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from utils.config import current_provider, get_secondary_client, get_secondary_model
+from utils.config import get_secondary_client, get_secondary_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -286,12 +286,12 @@ Rules:
 - Preserve exact indentation and formatting of unchanged code."""
 
 def _get_secondary_client():
-    """Return an OpenAI-compatible client for the current provider."""
+    """Return the client used for model-assisted edits."""
     return get_secondary_client()
 
 
 def _get_secondary_model() -> str:
-    """Return the secondary model name for the current provider."""
+    """Return the model used for model-assisted edits."""
     return get_secondary_model()
 
 
@@ -335,7 +335,6 @@ async def edit_file(target_file: str, instructions: str, code_edit: str) -> str:
                     ),
                 },
             ],
-            temperature=0,
         )
 
         new_content = response.choices[0].message.content

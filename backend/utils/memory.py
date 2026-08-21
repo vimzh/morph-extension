@@ -2,10 +2,18 @@
 
 import json
 import logging
+import re
 
 from utils.config import get_secondary_client, get_secondary_model
 
 logger = logging.getLogger(__name__)
+
+PERSISTENCE_SIGNAL = re.compile(
+    r"(?:^\s*(?:always|never)\b|\b(?:from now on|going forward|in future|for future|"
+    r"remember (?:that|to)|i prefer|my preference|do not ask me again|"
+    r"don't ask me again|stop asking)\b)",
+    re.IGNORECASE,
+)
 
 EXTRACTION_PROMPT = """\
 You are a meta-analysis assistant. Your job is to review a conversation between \
@@ -20,6 +28,8 @@ Focus on:
 
 Do NOT extract:
 - Facts about the specific task at hand (those are ephemeral)
+- Instructions that only apply to the current request, even when phrased imperatively
+- Behaviour suggested by the assistant rather than explicitly requested by the user
 - Rules that are already covered by the existing rules listed below
 - Obvious or generic best practices that any agent would follow
 
@@ -36,19 +46,23 @@ Respond ONLY with the JSON array. No explanation, no markdown fences.\
 async def extract_rules(
     history: list[dict],
     existing_rules: list[str],
-    provider: str = "openai",
 ) -> list[str]:
     """Analyse a conversation and return new rules to remember.
 
     Args:
         history: The conversation as [{role, content}, ...].
         existing_rules: Rules already stored for this project.
-        provider: LLM provider to use ("openai" or "nvidia").
-
     Returns:
         A (possibly empty) list of new rule strings.
     """
     if not history:
+        return []
+
+    latest_user_message = next(
+        (msg["content"] for msg in reversed(history) if msg.get("role") == "user"),
+        "",
+    )
+    if not PERSISTENCE_SIGNAL.search(latest_user_message):
         return []
 
     # Build the existing-rules block
@@ -57,16 +71,13 @@ async def extract_rules(
     else:
         rules_block = "(none yet)"
 
-    # Format conversation for the model
-    convo_lines: list[str] = []
-    for msg in history:
-        role = msg["role"].capitalize()
-        convo_lines.append(f"{role}: {msg['content']}")
-    conversation_text = "\n\n".join(convo_lines)
+    # Only the latest explicit preference is eligible. Re-processing the full
+    # conversation caused one-off task instructions and agent wording to become rules.
+    conversation_text = f"User: {latest_user_message}"
 
     try:
-        client = get_secondary_client(provider)
-        model = get_secondary_model(provider)
+        client = get_secondary_client()
+        model = get_secondary_model()
         response = await client.chat.completions.create(
             model=model,
             messages=[
@@ -79,8 +90,8 @@ async def extract_rules(
                     "content": conversation_text,
                 },
             ],
-            max_completion_tokens=512,
-            temperature=0.3,
+            max_completion_tokens=2048,
+            reasoning_effort="low",
         )
         raw = response.choices[0].message.content.strip()
         rules = json.loads(raw)
