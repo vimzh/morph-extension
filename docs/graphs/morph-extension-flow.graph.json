@@ -1,0 +1,162 @@
+{
+  "title": "From request to browser feature",
+  "subtitle": "Morph turns a plain-language browser task into a validated, installable extension",
+  "description": "The Morph product flow from user request and browser context through agentic coding, validation, installation, and iterative refinement.",
+  "footer": "Generate, validate, load, observe, and refine.",
+  "zones": [
+    {
+      "id": "input",
+      "label": "1 · WHAT ENTERS",
+      "tone": "blue",
+      "width": 1.0
+    },
+    {
+      "id": "transform",
+      "label": "2 · WHAT MORPH BUILDS",
+      "tone": "violet",
+      "width": 1.35
+    },
+    {
+      "id": "outcome",
+      "label": "3 · WHAT BECOMES USEFUL",
+      "tone": "green",
+      "width": 1.2
+    }
+  ],
+  "nodes": [
+    {
+      "id": "request",
+      "zone": "input",
+      "title": "Describe a browser task",
+      "body": ["plain-language request", "new project workspace"],
+      "note": "The user chooses the behavior",
+      "status": "external",
+      "size": "standard",
+      "row": 1,
+      "span": 2,
+      "evidence": ["morph-extension/src/sidepanel/App.tsx", "backend/main.py"]
+    },
+    {
+      "id": "context",
+      "zone": "input",
+      "title": "Bring in the current page",
+      "body": ["open-tab metadata", "page content and console logs"],
+      "note": "Only requested browser context crosses the boundary",
+      "status": "implemented",
+      "size": "standard",
+      "row": 2,
+      "span": 2,
+      "evidence": ["morph-extension/src/sidepanel/App.tsx", "morph-extension/src/content/main.tsx", "backend/utils/tools.py"]
+    },
+    {
+      "id": "agent",
+      "zone": "transform",
+      "title": "The coding agent plans and writes",
+      "body": ["inspect → search → create → edit", "Manifest V3 extension files"],
+      "note": "The tool loop observes results before continuing",
+      "status": "implemented",
+      "size": "wide",
+      "row": 1,
+      "span": 2,
+      "evidence": ["backend/utils/agent.py", "backend/utils/prompts.py", "backend/utils/tools.py"]
+    },
+    {
+      "id": "workspace",
+      "zone": "transform",
+      "title": "A real project takes shape",
+      "body": ["files persist in the project workspace", "conversation history stays available"],
+      "status": "implemented",
+      "size": "wide",
+      "row": 2,
+      "span": 2,
+      "evidence": ["backend/main.py", "backend/utils/tools.py", "backend/utils/db.py"]
+    },
+    {
+      "id": "validate",
+      "zone": "transform",
+      "title": "Validate before handing it over",
+      "body": ["manifest and file references", "JavaScript syntax and MV3 checks"],
+      "note": "Broken extensions stop here instead of being presented as ready",
+      "status": "implemented",
+      "size": "wide",
+      "row": 3,
+      "span": 2,
+      "evidence": ["backend/utils/extension_validator.py", "backend/utils/tools.py"]
+    },
+    {
+      "id": "install",
+      "zone": "outcome",
+      "title": "Load the extension in Chrome",
+      "body": ["build the generated workspace", "show an install handoff"],
+      "note": "The user can inspect and load ordinary extension files",
+      "status": "implemented",
+      "size": "standard",
+      "row": 1,
+      "span": 2,
+      "evidence": ["backend/utils/tools.py", "backend/utils/companion.py", "morph-extension/src/sidepanel/App.tsx"]
+    },
+    {
+      "id": "refine",
+      "zone": "outcome",
+      "title": "Request the next focused change",
+      "body": ["observe the browser result", "refine the same project"],
+      "note": "The loop continues until the behavior is useful",
+      "status": "implemented",
+      "size": "standard",
+      "row": 2,
+      "span": 2,
+      "evidence": ["backend/main.py", "morph-extension/src/sidepanel/App.tsx", "backend/utils/memory.py"]
+    }
+  ],
+  "edges": [
+    {
+      "from": "request",
+      "to": "context",
+      "tone": "blue",
+      "route": "vertical",
+      "label_position": "middle"
+    },
+    {
+      "from": "context",
+      "to": "agent",
+      "tone": "violet",
+      "route": "orthogonal",
+      "label_position": "middle"
+    },
+    {
+      "from": "agent",
+      "to": "workspace",
+      "tone": "violet",
+      "route": "vertical",
+      "label_position": "middle"
+    },
+    {
+      "from": "workspace",
+      "to": "validate",
+      "tone": "amber",
+      "route": "vertical",
+      "label_position": "middle"
+    },
+    {
+      "from": "validate",
+      "to": "install",
+      "tone": "green",
+      "route": "orthogonal",
+      "label_position": "middle"
+    },
+    {
+      "from": "install",
+      "to": "refine",
+      "tone": "green",
+      "route": "vertical",
+      "label_position": "middle"
+    },
+    {
+      "from": "refine",
+      "to": "agent",
+      "tone": "violet",
+      "route": "feedback",
+      "label_position": "middle"
+    }
+  ]
+}

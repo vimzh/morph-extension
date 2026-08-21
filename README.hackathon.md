@@ -29,11 +29,9 @@ Morph is a Chrome side-panel experience backed by an AI coding agent. A user des
 
 The generated result is ordinary Chrome extension code—not a locked-in visual mockup—so it can be inspected, loaded unpacked, and extended later.
 
-<!-- README-HACK:GRAPH
-type: product-flow
-brief: Show a user in the Morph Chrome side panel entering a browser task, Morph creating and editing a Manifest V3 extension, validating and building it, then presenting an installable extension that changes the user's page.
-placement: after "What Morph does"
--->
+<p align="center">
+  <img src="docs/graphs/morph-extension-flow.svg" alt="Morph user flow from a browser task through agentic coding and validation to an installable extension and iterative refinement." width="1100" />
+</p>
 
 ## Examples in the repository
 
