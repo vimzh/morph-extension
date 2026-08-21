@@ -48,7 +48,7 @@ current_console_log_cache: contextvars.ContextVar[
 TAB_CONTENT_CHUNK_SIZE = 10_000
 CONSOLE_LOG_CHUNK_SIZE = 10_000
 
-DEMO_CODE_BASE = Path(__file__).parent.parent / "demo_code"
+DEMO_CODE_BASE = Path(__file__).parent.parent / "generated-extensions"
 
 
 def _resolve_path(relative_path: str) -> Path:

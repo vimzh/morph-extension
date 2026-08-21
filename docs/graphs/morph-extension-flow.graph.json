@@ -34,7 +34,7 @@
       "size": "standard",
       "row": 1,
       "span": 2,
-      "evidence": ["morph-extension/src/sidepanel/App.tsx", "backend/main.py"]
+      "evidence": ["extension/src/sidepanel/App.tsx", "api/main.py"]
     },
     {
       "id": "context",
@@ -46,7 +46,7 @@
       "size": "standard",
       "row": 2,
       "span": 2,
-      "evidence": ["morph-extension/src/sidepanel/App.tsx", "morph-extension/src/content/main.tsx", "backend/utils/tools.py"]
+      "evidence": ["extension/src/sidepanel/App.tsx", "extension/src/content/main.tsx", "api/utils/tools.py"]
     },
     {
       "id": "agent",
@@ -58,7 +58,7 @@
       "size": "wide",
       "row": 1,
       "span": 2,
-      "evidence": ["backend/utils/agent.py", "backend/utils/prompts.py", "backend/utils/tools.py"]
+      "evidence": ["api/utils/agent.py", "api/utils/prompts.py", "api/utils/tools.py"]
     },
     {
       "id": "workspace",
@@ -69,7 +69,7 @@
       "size": "wide",
       "row": 2,
       "span": 2,
-      "evidence": ["backend/main.py", "backend/utils/tools.py", "backend/utils/db.py"]
+      "evidence": ["api/main.py", "api/utils/tools.py", "api/utils/db.py"]
     },
     {
       "id": "validate",
@@ -81,7 +81,7 @@
       "size": "wide",
       "row": 3,
       "span": 2,
-      "evidence": ["backend/utils/extension_validator.py", "backend/utils/tools.py"]
+      "evidence": ["api/utils/extension_validator.py", "api/utils/tools.py"]
     },
     {
       "id": "install",
@@ -93,7 +93,7 @@
       "size": "standard",
       "row": 1,
       "span": 2,
-      "evidence": ["backend/utils/tools.py", "backend/utils/companion.py", "morph-extension/src/sidepanel/App.tsx"]
+      "evidence": ["api/utils/tools.py", "api/utils/companion.py", "extension/src/sidepanel/App.tsx"]
     },
     {
       "id": "refine",
@@ -105,7 +105,7 @@
       "size": "standard",
       "row": 2,
       "span": 2,
-      "evidence": ["backend/main.py", "morph-extension/src/sidepanel/App.tsx", "backend/utils/memory.py"]
+      "evidence": ["api/main.py", "extension/src/sidepanel/App.tsx", "api/utils/memory.py"]
     }
   ],
   "edges": [

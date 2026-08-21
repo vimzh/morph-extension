@@ -43,7 +43,7 @@ wheels = [
 ]
 
 [[package]]
-name = "backend"
+name = "morph-api"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

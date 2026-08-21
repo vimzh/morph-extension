@@ -117,7 +117,7 @@ flowchart TD
 
         %% ─── STORAGE ────────────────────────────────────────────────
         DB[("SQLite<br/><i>projects · conversations<br/>messages · rules</i>")]:::storage
-        FS[("demo_code/{project}/<br/><i>generated extension files</i>")]:::storage
+        FS[("api/generated-extensions/{project}/<br/><i>generated extension files</i>")]:::storage
     end
 
     %% ─── CROSS-LAYER CONNECTIONS ────────────────────────────────────

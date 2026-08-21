@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="morph-extension/public/morph-logo-128.png" width="96" alt="Morph logo" />
+  <img src="extension/public/morph-logo-128.png" width="96" alt="Morph logo" />
 </p>
 
 <h1 align="center">Morph: Your AI Browser Extension Builder</h1>
@@ -63,7 +63,7 @@ The agent can inspect files, search the project semantically, read current tab c
 
 ![Morph agent architecture](media/agent-flow-real.png)
 
-The primary agent uses OpenAI's `gpt-5.2`; supporting tasks use `gpt-5-nano-2025-08-07`, and semantic retrieval uses `text-embedding-3-small`. The provider and model configuration live in `backend/utils/config.py`.
+The primary agent uses OpenAI's `gpt-5.2`; supporting tasks use `gpt-5-nano-2025-08-07`, and semantic retrieval uses `text-embedding-3-small`. The provider and model configuration live in `api/utils/config.py`.
 
 ## Built with
 
@@ -77,28 +77,28 @@ The primary agent uses OpenAI's `gpt-5.2`; supporting tasks use `gpt-5-nano-2025
 
 ## Run locally
 
-### 1. Start the backend
+### 1. Start the API service
 
 ```bash
-cd backend
+cd api
 uv sync
 export OPENAI_API_KEY="your-key"
 uv run main.py
 ```
 
-The backend listens on port `8001` by default. Set `MORPH_PORT` to change it.
+The API service listens on port `8001` by default. Set `MORPH_PORT` to change it.
 
 ### 2. Build the extension
 
 In a second terminal:
 
 ```bash
-cd morph-extension
+cd extension
 npm install
 npm run build
 ```
 
-Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `morph-extension/dist`.
+Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `extension/dist`.
 
 If the backend runs on another URL, set `VITE_API_URL` when building the extension, for example:
 
@@ -106,7 +106,7 @@ If the backend runs on another URL, set `VITE_API_URL` when building the extensi
 VITE_API_URL=http://localhost:9001 npm run build
 ```
 
-On macOS, the optional one-click Chrome loading flow also requires Chrome's **Allow JavaScript from Apple Events** setting. Otherwise, load generated extensions manually from `backend/demo_code`.
+On macOS, the optional one-click Chrome loading flow also requires Chrome's **Allow JavaScript from Apple Events** setting. Otherwise, load generated extensions manually from `api/generated-extensions`.
 
 ## What works today
 

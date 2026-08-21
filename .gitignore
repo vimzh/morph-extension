@@ -10,6 +10,6 @@ wheels/
 .venv
 .env
 conversations.db
-demo_code/
+api/generated-extensions/
 .DS_Store
 .cursor/plans/
