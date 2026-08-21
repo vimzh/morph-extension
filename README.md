@@ -1,8 +1,5 @@
 # Morph
 
-## CHROMIUM FORK
-The Chromium fork is located in the branch: `chromium`.
-
 ## Inspiration
 Web browsing is static. Browsers and websites treat all of their users almost exactly the same, but there isn't a one-size fits all for the billions who use the internet. If a user wants some feature added or changed (e.g. hiding all YouTube shorts when visiting the website to avoid distraction), they must either: (i) hope the browser/website developer can and are willing to make it for them, (ii) hope and trust someone made a Chrome extension for their exact use case (without charging an arm and a leg), or (iii) have the time and expertise to make it themself.
 
