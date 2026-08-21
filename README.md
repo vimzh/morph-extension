@@ -41,14 +41,9 @@ We believe we need to stop constraining users with this one-size fits all mindse
 
 -  Alastair's YouTube filter: When visiting YouTube.com, hide all YouTube shorts and all videos which have any League of Legends keywords in their title between 9 AM - 5 PM.
 
-![youtube_extension_gif](./media/youtube_extension.gif)
-
 - Haley's Email Manager: Stanford students get a lot of spam (and are forced to use Outlook), Haley wanted an extension which will help her quickly delete all her spam emails.
 
-![email_manager_gif](./media/email_manager_extension.gif)
-
 - Antonio's Ad Blocker: Chrome banned uBlock Origin (Antonio's favorite ad blocker), but Antonio doesn't want to switch browsers. Antonio uses **Morph** to create a custom ad blocker for his most visited sites (and if he ever wants to extend its ad-blocking capabilities to new sites he can just tell **Morph** to update the extension).
-![adblocker extension gif](./media/adblock_extension.gif)
 
 ## How we built it
 ![Agent Flow Diagram](./media/agent-flow-real.png)

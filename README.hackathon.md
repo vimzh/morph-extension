@@ -37,19 +37,13 @@ placement: after "What Morph does"
 
 ## Examples in the repository
 
-These recorded examples show the kind of practical browser customizations Morph can produce:
+These examples show the kind of practical browser customizations Morph can produce:
 
 | Example | What it demonstrates |
 | --- | --- |
 | YouTube filter | Hides Shorts and filters videos by title keywords. |
 | Email manager | Adds a focused workflow for removing unwanted email. |
 | Site-specific ad blocker | Removes unwanted sponsored or advertising elements on selected sites. |
-
-![YouTube extension demo](media/youtube_extension.gif)
-
-![Email manager extension demo](media/email_manager_extension.gif)
-
-![Ad blocker extension demo](media/adblock_extension.gif)
 
 ## Why it is useful
 
