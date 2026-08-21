@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from utils.config import PROVIDERS, current_provider
+from utils.config import PRIMARY_MODEL
 from utils.prompts import CODEBASE_SEARCH_UNAVAILABLE_NOTE, SYSTEM_PROMPT
 from utils.tools import (
     ALL_TOOLS,
@@ -19,16 +19,9 @@ from utils.tools import (
 )
 
 
-class EvolveAgent:
+class CodingAgent:
     def __init__(self):
-        # Create one LLM per provider so we can switch at request time
-        self._llms = {
-            name: init_chat_model(
-                model=cfg["primary_model"],
-                model_provider=cfg["model_provider"],
-            )
-            for name, cfg in PROVIDERS.items()
-        }
+        self.llm = init_chat_model(model=PRIMARY_MODEL, model_provider="openai")
         # Full tool lookup dict — used for dispatching tool calls at runtime
         self.all_tools = {t.name: t for t in ALL_TOOLS}
 
@@ -80,7 +73,8 @@ class EvolveAgent:
                 )
             prompt += (
                 "\n\n## User's Open Browser Tabs\n"
-                "Use `get_tab_content(tab_id)` to fetch a page's text when needed.\n"
+                "Use `get_tab_content(tab_id)` to fetch a page's text when needed. "
+                "If the user asks about visible or current page content, fetch the active tab instead of inferring from its title or saying the content is unavailable.\n"
                 + "\n".join(tab_lines)
             )
 
@@ -102,7 +96,7 @@ class EvolveAgent:
         current_project_dir.set(project_dir)
         return project_dir
 
-    def _prepare_request(self, project_id: str, provider: str = "openai"):
+    def _prepare_request(self, project_id: str):
         """Set context, start background build if needed, return (bound_llm, cs_available).
 
         Determines whether the codebase_search tool should be exposed for this
@@ -112,15 +106,12 @@ class EvolveAgent:
         from utils.graph_rag import is_index_ready, start_background_build
 
         project_dir = self._set_project_context(project_id)
-        current_provider.set(provider)
-
         cs_available = is_index_ready(project_dir)
         if not cs_available:
             start_background_build(project_dir)
 
         tools_list = get_available_tools(include_codebase_search=cs_available)
-        base_llm = self._llms.get(provider, self._llms["openai"])
-        bound_llm = base_llm.bind_tools(tools_list)
+        bound_llm = self.llm.bind_tools(tools_list)
 
         return bound_llm, cs_available
 
@@ -129,17 +120,13 @@ class EvolveAgent:
         history: list[dict],
         project_id: str,
         rules: list[str] | None = None,
-        provider: str = "openai",
     ) -> str:
         """Send conversation history to the LLM, execute any tool calls, and return the final reply."""
-        bound_llm, cs_available = self._prepare_request(project_id, provider=provider)
+        bound_llm, cs_available = self._prepare_request(project_id)
         messages = self._build_messages(history, codebase_search_available=cs_available, rules=rules)
 
         while True:
             response = await bound_llm.ainvoke(messages)
-            # Some providers (e.g. NVIDIA) reject empty-string content.
-            if not response.content:
-                response.content = "\u200b"
             messages.append(response)
 
             if not response.tool_calls:
@@ -162,7 +149,6 @@ class EvolveAgent:
         active_tabs: list[dict] | None = None,
         pending_tab_requests: dict | None = None,
         rules: list[str] | None = None,
-        provider: str = "openai",
     ) -> AsyncGenerator[dict, None]:
         """Stream conversation history to the LLM, execute tool calls, and yield event dicts.
 
@@ -172,7 +158,7 @@ class EvolveAgent:
         - {"type": "tool_end", "name": "..."} when a tool finishes
         - {"type": "request_tab_content", ...} when a tool needs browser data
         """
-        bound_llm, cs_available = self._prepare_request(project_id, provider=provider)
+        bound_llm, cs_available = self._prepare_request(project_id)
         messages = self._build_messages(
             history,
             codebase_search_available=cs_available,
@@ -202,10 +188,6 @@ class EvolveAgent:
             if full_response is None:
                 return
 
-            # Some providers (e.g. NVIDIA) reject empty-string content.
-            # When the LLM only produces tool calls, content is "".
-            if not full_response.content:
-                full_response.content = "\u200b"
             messages.append(full_response)
 
             if not full_response.tool_calls:
