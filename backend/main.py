@@ -1,12 +1,14 @@
 import asyncio
 import json
 import logging
+import os
 import shutil
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.websockets import WebSocketState
 
 from utils.agent import CodingAgent
 from utils.companion import load_extension_via_os
@@ -53,9 +55,23 @@ async def generate_conversation_title(user_message: str, assistant_message: str)
                 "content": f"User: {user_message[:500]}\n\nAssistant: {assistant_message[:500]}",
             },
         ],
-        max_completion_tokens=20,
+        max_completion_tokens=100,
     )
-    return response.choices[0].message.content.strip()
+    title = (response.choices[0].message.content or "").strip()
+    if title:
+        return title
+
+    logger.warning("Title model returned empty content; using the user message")
+    return " ".join(user_message.split()[:6]) or "New conversation"
+
+
+async def send_if_connected(websocket: WebSocket, payload: dict) -> None:
+    """Send a background update only while the WebSocket remains open."""
+    if (
+        websocket.client_state == WebSocketState.CONNECTED
+        and websocket.application_state == WebSocketState.CONNECTED
+    ):
+        await websocket.send_json(payload)
 
 
 @asynccontextmanager
@@ -291,12 +307,13 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                         try:
                             title = await generate_conversation_title(user_msg, asst_msg)
                             await update_conversation_title(cid, title)
-                            await ws.send_json(
+                            await send_if_connected(
+                                ws,
                                 {
                                     "type": "conversation_title",
                                     "conversation_id": cid,
                                     "title": title,
-                                }
+                                },
                             )
                         except Exception as exc:
                             logger.info("Conversation title delivery stopped: %s", exc)
@@ -316,8 +333,8 @@ async def ws_chat(websocket: WebSocket, project_id: str):
                         new_rules = await extract_rules(conv_history, existing_rules)
                         if new_rules:
                             created = await save_rules(pid, new_rules)
-                            await ws.send_json(
-                                {"type": "rules_updated", "rules": created}
+                            await send_if_connected(
+                                ws, {"type": "rules_updated", "rules": created}
                             )
                     except Exception as exc:
                         logger.info("Rule update delivery stopped: %s", exc)
@@ -376,4 +393,4 @@ async def delete_rule_route(rule_id: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("MORPH_PORT", "8001")))

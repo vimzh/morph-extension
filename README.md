@@ -7,6 +7,9 @@ Get backend ready.
 2. `uv sync`
 3. `uv run main.py`
 
+The backend defaults to port `8001`. Set `MORPH_PORT` and the extension's
+`VITE_API_URL` if you need a different port.
+
 Get extension ready.
 1. `cd morph-extension`
 2. `npm install`

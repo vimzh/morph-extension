@@ -5,7 +5,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
 import './App.css'
 
-const API_URL = 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
 export default function App() {
   const [query, setQuery] = useState('')

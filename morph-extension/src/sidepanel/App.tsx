@@ -14,7 +14,7 @@ import {
 } from '../shared/messages'
 import './App.css'
 
-const API_URL = 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 const WS_URL = API_URL.replace(/^http/, 'ws')
 const CHIP_HTML_START = '<!--CONTEXT_CHIP_START:'
 const CHIP_HTML_END = '<!--CONTEXT_CHIP_END-->'
@@ -1541,12 +1541,11 @@ export default function App() {
   const fetchProjects = async () => {
     try {
       const res = await fetch(`${API_URL}/projects`)
-      if (res.ok) {
-        const data: Project[] = await res.json()
-        setProjects(data)
-      }
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const data: Project[] = await res.json()
+      setProjects(data)
     } catch {
-      // Silently fail
+      setError('Failed to load projects')
     }
   }
 
@@ -1555,18 +1554,18 @@ export default function App() {
     if (!name) return
 
     setCreatingProject(true)
+    setError('')
     try {
       const res = await fetch(`${API_URL}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       })
-      if (res.ok) {
-        const project: Project = await res.json()
-        setNewProjectName('')
-        setProjects((prev) => [project, ...prev])
-        selectProject(project)
-      }
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      const project: Project = await res.json()
+      setNewProjectName('')
+      setProjects((prev) => [project, ...prev])
+      selectProject(project)
     } catch {
       setError('Failed to create project')
     } finally {
